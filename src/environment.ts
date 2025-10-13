@@ -1,5 +1,5 @@
 import open from 'open'
-import { startServer } from './transports/redis-server.js'
+import { startServer, TutorBridge } from './transports/redis-server.js'
 
 export interface LearningEnvironmentOptions {
   port?: number
@@ -9,12 +9,13 @@ export interface LearningEnvironmentOptions {
 export interface LearningEnvironment {
   url: string
   close: () => Promise<void>
+  tutorBridge: TutorBridge
 }
 
 // Adapter that hides the Redis-specific server. Tutor code imports only this.
 export async function startLearningEnvironment(opts: LearningEnvironmentOptions): Promise<LearningEnvironment> {
   const port = opts.port ?? 3000
-  const { server } = await startServer({ port, sessionId: opts.sessionId })
+  const { server, tutorBridge } = await startServer({ port, sessionId: opts.sessionId })
   const url = `http://localhost:${port}`
 
   // Open the environment in the default browser
@@ -22,6 +23,7 @@ export async function startLearningEnvironment(opts: LearningEnvironmentOptions)
 
   return {
     url,
+    tutorBridge,
     close: async () => new Promise<void>((resolve, reject) => {
       server.close((err?: Error) => (err ? reject(err) : resolve()))
     })

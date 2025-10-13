@@ -19,6 +19,8 @@ interface SessionState {
   lessonPlan?: LessonPlan
   currentExerciseIndex: number
   diagnosticDef?: DiagnosticDef
+  tutorBridge?: any // Will be set after environment starts
+  exerciseStates: string[] // 'untouched', 'current', 'completed', 'skipped'
 }
 
 // Prompt user for session context
@@ -160,7 +162,14 @@ function evaluateLocally(state: SessionState, cmd: CapturedCommand): string | nu
       }
     }
 
+    // Mark current exercise as completed
+    state.exerciseStates[state.currentExerciseIndex] = 'completed'
     state.currentExerciseIndex++
+
+    // Mark next exercise as current if there is one
+    if (state.currentExerciseIndex < state.lessonPlan.exercises.length) {
+      state.exerciseStates[state.currentExerciseIndex] = 'current'
+    }
 
     if (state.currentExerciseIndex >= state.lessonPlan.exercises.length) {
       return `🎉 ${currentExercise.feedback}\n\nYou've completed this lesson! Great work on ${state.lessonPlan.topic}.`
@@ -173,15 +182,37 @@ function evaluateLocally(state: SessionState, cmd: CapturedCommand): string | nu
   return null
 }
 
+// Send tutor message to browser
+function sendTutorMessage(state: SessionState, message: string, type: string = 'tutor') {
+  if (state.tutorBridge) {
+    state.tutorBridge.sendMessage(message, type)
+  }
+}
+
+// Send progress update to browser
+function sendProgressUpdate(state: SessionState) {
+  if (state.tutorBridge && state.lessonPlan) {
+    state.tutorBridge.sendProgress({
+      topic: `${state.lessonPlan.topic} (${state.lessonPlan.level})`,
+      exerciseIndex: state.currentExerciseIndex,
+      totalExercises: state.lessonPlan.exercises.length,
+      currentExercise: state.currentExerciseIndex < state.lessonPlan.exercises.length
+        ? state.lessonPlan.exercises[state.currentExerciseIndex].command
+        : 'Complete!',
+      exerciseStates: state.exerciseStates
+    })
+  }
+}
+
 // Handle command from learning environment
 async function handleCommand(state: SessionState, cmd: CapturedCommand): Promise<string> {
   if (state.mode === 'diagnostic') {
     state.diagnosticCommands.push(cmd)
 
     if (state.diagnosticCommands.length >= 2) {
-      console.log()
-      console.log('⚡ Calibrating your lesson...')
-      console.log()
+      console.log('[TUTOR] Calibrating lesson...')
+
+      sendTutorMessage(state, '⚡ Calibrating your lesson...')
 
       const lessonPlan = await generatePersonalizedLesson(
         state.context,
@@ -196,40 +227,120 @@ async function handleCommand(state: SessionState, cmd: CapturedCommand): Promise
         state.mode = 'lesson'
         state.currentExerciseIndex = 0
 
-        return `📚 ${lessonPlan.topic} (${lessonPlan.level})\n${lessonPlan.summary}\n\nLet's start: ${lessonPlan.exercises[0].command}`
+        // Initialize exercise states: first is current, rest are untouched
+        state.exerciseStates = lessonPlan.exercises.map((_, i) => i === 0 ? 'current' : 'untouched')
+
+        sendProgressUpdate(state)
+
+        const message = `📚 ${lessonPlan.topic} (${lessonPlan.level})\n${lessonPlan.summary}\n\nLet's start: ${lessonPlan.exercises[0].command}`
+        sendTutorMessage(state, message)
+        return message
       } else {
-        return 'Sorry, I had trouble generating your lesson. Let\'s continue with basics.'
+        const message = 'Sorry, I had trouble generating your lesson. Let\'s continue with basics.'
+        sendTutorMessage(state, message)
+        return message
       }
     }
 
     // Suggest second diagnostic command if available
     const nextDiag = state.diagnosticDef?.diagnostics?.[1]
+    let message: string
     if (nextDiag) {
-      return `Good! One more to calibrate your level. Try: ${nextDiag}`
+      message = `Good! One more to calibrate your level. Try: ${nextDiag}`
+    } else {
+      message = 'Good! One more to calibrate your level.'
     }
-    return 'Good! One more to calibrate your level.'
+    sendTutorMessage(state, message)
+    return message
   }
 
   const localEval = evaluateLocally(state, cmd)
   if (localEval) {
+    const isSuccess = localEval.includes('✓')
+    sendTutorMessage(state, localEval, isSuccess ? 'success' : 'tutor')
+    sendProgressUpdate(state)
     return localEval
   }
 
-  return '🤔 That\'s not what I expected. Try the suggested command!'
+  const message = '🤔 That\'s not what I expected. Try the suggested command!'
+  sendTutorMessage(state, message)
+  return message
+}
+
+// Handle hint request from user
+function handleHintRequest(state: SessionState) {
+  console.log('[TUTOR] Hint requested')
+
+  if (state.mode !== 'lesson' || !state.lessonPlan) {
+    sendTutorMessage(state, 'No hints available during diagnostic phase.')
+    return
+  }
+
+  if (state.currentExerciseIndex >= state.lessonPlan.exercises.length) {
+    sendTutorMessage(state, 'You\'ve completed all exercises!')
+    return
+  }
+
+  const currentExercise = state.lessonPlan.exercises[state.currentExerciseIndex]
+  const hint = currentExercise.hint || 'No hint available for this exercise. Try the suggested command!'
+
+  sendTutorMessage(state, `💡 Hint: ${hint}`)
+}
+
+// Handle skip request from user
+function handleSkipRequest(state: SessionState) {
+  console.log('[TUTOR] Skip requested')
+
+  if (state.mode !== 'lesson' || !state.lessonPlan) {
+    sendTutorMessage(state, 'Nothing to skip during diagnostic phase.')
+    return
+  }
+
+  if (state.currentExerciseIndex >= state.lessonPlan.exercises.length) {
+    sendTutorMessage(state, 'You\'ve completed all exercises!')
+    return
+  }
+
+  // Mark current exercise as skipped
+  state.exerciseStates[state.currentExerciseIndex] = 'skipped'
+
+  // Move to next exercise
+  state.currentExerciseIndex++
+
+  // Mark next exercise as current if there is one
+  if (state.currentExerciseIndex < state.lessonPlan.exercises.length) {
+    state.exerciseStates[state.currentExerciseIndex] = 'current'
+  }
+
+  if (state.currentExerciseIndex >= state.lessonPlan.exercises.length) {
+    const message = `You've reached the end of the lesson. You skipped some exercises - consider reviewing them later!`
+    sendTutorMessage(state, message)
+    sendProgressUpdate(state)
+    return
+  }
+
+  const nextExercise = state.lessonPlan.exercises[state.currentExerciseIndex]
+  const message = `⏭️ Skipped! Moving to next exercise: ${nextExercise.command}`
+  sendTutorMessage(state, message)
+  sendProgressUpdate(state)
 }
 
 // Main tutor process
 async function runTutor() {
-  console.log('━'.repeat(60))
-  console.log('🎓 Prism Tutor')
-  console.log('━'.repeat(60))
+  console.log('[TUTOR] ' + '━'.repeat(60))
+  console.log('[TUTOR] 🎓 Prism Tutor')
+  console.log('[TUTOR] ' + '━'.repeat(60))
   console.log()
 
   // Get session context
   const userGoal = await getUserSessionContext()
+  console.log(`[TUTOR] User goal: "${userGoal}"`)
+
   // Load course artifacts (diagnostics and lessons) from markdown
   const courseId = 'redis-fundamentals'
   loadedArtifacts = await loadCourseArtifacts(courseId)
+  console.log(`[TUTOR] Loaded ${loadedArtifacts.diagnostics.length} diagnostics, ${loadedArtifacts.lessons.length} lessons`)
+
   const picked = pickDiagnostic(userGoal, loadedArtifacts)
 
   const sessionId = `session-${Date.now()}`
@@ -248,49 +359,70 @@ async function runTutor() {
     diagnosticCommands: [],
     currentExerciseIndex: 0,
     diagnosticDef: picked.def,
+    exerciseStates: []
   }
 
   console.log()
-  console.log(`📚 ${picked.def.topic}`)
-  console.log()
-  console.log('Starting your learning environment...')
+  console.log(`[TUTOR] Topic: ${picked.def.topic}`)
+  console.log('[TUTOR] Starting learning environment...')
   console.log()
 
   // Start learning environment via adapter
   const env = await startLearningEnvironment({ port: 3000, sessionId })
 
-  // Auto-open browser
-  console.log()
-  console.log('Opening your learning environment...')
-  // Already opened by the environment adapter, but keep URL for logs
-  console.log(`URL: ${env.url}`)
+  // Store tutorBridge in state
+  state.tutorBridge = env.tutorBridge
 
+  // Register hint and skip handlers
+  env.tutorBridge.onHintRequest(() => {
+    handleHintRequest(state)
+  })
+
+  env.tutorBridge.onSkipRequest(() => {
+    handleSkipRequest(state)
+  })
+
+  // Auto-open browser
+  console.log('[TUTOR] Browser opened')
+  console.log(`[TUTOR] URL: ${env.url}`)
   console.log()
+
+  // Send initial message to browser
+  let initialMessage: string
   if (picked.firstCommand) {
-    console.log(`Let's see what you know! Try: ${picked.firstCommand}`)
+    initialMessage = `Let's see what you know! Try: ${picked.firstCommand}`
   } else {
-    console.log(`Let's see what you know!`)
+    initialMessage = `Let's see what you know!`
   }
-  console.log()
-  console.log('━'.repeat(60))
+  sendTutorMessage(state, initialMessage)
+
+  // Also send initial progress update
+  if (state.tutorBridge) {
+    state.tutorBridge.sendProgress({
+      topic: picked.def.topic,
+      exerciseIndex: 0,
+      totalExercises: 0,
+      currentExercise: 'Diagnostic phase...'
+    })
+  }
+
+  console.log('[TUTOR] ━'.repeat(30))
   console.log()
 
   // Subscribe to command stream
   const stream = createCommandStream(sessionId)
   await stream.subscribe(async (cmd) => {
     try {
+      console.log(`[TUTOR] Processing command: ${cmd.command}`)
       const feedback = await handleCommand(state, cmd)
-      console.log()
-      console.log('🎓 ' + feedback)
-      console.log()
+      // Feedback is sent to browser via tutorBridge, no console output needed
     } catch (err) {
       console.error('[TUTOR] Error processing command:', err)
     }
   })
 
   console.log('[TUTOR] Command stream connected')
-  console.log()
-  console.log('✓ Tutor ready - watching your progress...')
+  console.log('[TUTOR] ✓ Tutor ready - watching your progress...')
   console.log()
 }
 
