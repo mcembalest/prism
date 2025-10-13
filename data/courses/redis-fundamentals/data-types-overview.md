@@ -24,6 +24,17 @@ INCR counter
 APPEND key "more"
 ```
 
+```prism-diagnostic
+{
+  "topic": "Redis Strings",
+  "keywords": ["string", "strings", "counter", "value"],
+  "diagnostics": [
+    "SET counter 0",
+    "INCR counter"
+  ]
+}
+```
+
 ### Hashes
 
 Record types with field-value pairs (like objects or dictionaries).
@@ -39,6 +50,33 @@ Record types with field-value pairs (like objects or dictionaries).
 HSET user:1 name "Alice" age 30
 HGET user:1 name
 HGETALL user:1
+```
+
+```prism-diagnostic
+{
+  "topic": "Redis Hashes",
+  "lessonTopic": "Redis Hashes - Basics",
+  "keywords": ["hash", "hashes", "field", "object", "profile"],
+  "diagnostics": [
+    "HSET user:1 name Alice",
+    "HGET user:1 name"
+  ]
+}
+```
+
+```prism-lesson
+{
+  "topic": "Redis Hashes - Basics",
+  "level": "beginner",
+  "summary": "Learn to store and retrieve fields in Redis hashes",
+  "exercises": [
+    { "command": "HSET user:2 email alice@example.com", "feedback": "Perfect! You stored another field in the hash." },
+    { "command": "HGET user:2 email", "feedback": "Great! You retrieved the email field." },
+    { "command": "HGETALL user:2", "feedback": "Excellent! You retrieved all fields from the hash." },
+    { "command": "HSET product:1 name \"Laptop\" price 999", "feedback": "Nice! You can set multiple fields at once." },
+    { "command": "HINCRBY product:1 price 50", "feedback": "Perfect! You incremented a numeric field." }
+  ]
+}
 ```
 
 ### Lists
@@ -59,6 +97,32 @@ LRANGE mylist 0 -1
 LPOP mylist
 ```
 
+```prism-diagnostic
+{
+  "topic": "Redis Lists",
+  "lessonTopic": "Redis Lists - Basics",
+  "keywords": ["list", "lists", "queue", "tasks", "lpush", "rpush"],
+  "diagnostics": [
+    "LPUSH queue \"task1\"",
+    "LRANGE queue 0 -1"
+  ]
+}
+```
+
+```prism-lesson
+{
+  "topic": "Redis Lists - Basics",
+  "level": "beginner",
+  "summary": "Learn to work with Redis lists",
+  "exercises": [
+    { "command": "LPUSH queue \"task2\"", "feedback": "Great! Added to the left of the list." },
+    { "command": "RPUSH queue \"task3\"", "feedback": "Perfect! Added to the right of the list." },
+    { "command": "LRANGE queue 0 -1", "feedback": "Nice! You viewed all items in the list." },
+    { "command": "LPOP queue", "feedback": "Excellent! Removed from the left." }
+  ]
+}
+```
+
 ### Sets
 
 Unordered collections of unique strings.
@@ -75,6 +139,17 @@ SADD myset "member1" "member2"
 SMEMBERS myset
 SISMEMBER myset "member1"
 SINTER set1 set2
+```
+
+```prism-diagnostic
+{
+  "topic": "Redis Sets",
+  "keywords": ["set", "sets", "unique", "tags"],
+  "diagnostics": [
+    "SADD tags \"redis\"",
+    "SMEMBERS tags"
+  ]
+}
 ```
 
 ### Sorted Sets

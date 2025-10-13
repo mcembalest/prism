@@ -114,8 +114,19 @@ export async function startServer(options: ServerOptions) {
 
     const ws = new WebSocket('ws://' + window.location.host);
 
+    // Send terminal size updates to backend
+    function sendResize() {
+      if (ws.readyState === WebSocket.OPEN) {
+        const size = { cols: term.cols, rows: term.rows };
+        console.log('Sending resize:', size);
+        ws.send(JSON.stringify({ type: 'resize', ...size }));
+      }
+    }
+
     ws.onopen = () => {
       console.log('Connected to terminal');
+      // Send initial size immediately after connection
+      sendResize();
     };
 
     ws.onmessage = (event) => {
@@ -132,6 +143,7 @@ export async function startServer(options: ServerOptions) {
 
     window.addEventListener('resize', () => {
       fitAddon.fit();
+      sendResize();
     });
   </script>
 </body>
@@ -143,14 +155,14 @@ export async function startServer(options: ServerOptions) {
   wss.on('connection', (ws) => {
     console.log('Browser connected')
 
-    // Spawn redis-cli
+    // Spawn redis-cli with large initial size (will be resized by client)
     const ptyProcess = pty.spawn('redis-cli', [
       '-h', redisHost,
       '-p', redisPort.toString()
     ], {
       name: 'xterm-color',
-      cols: 100,
-      rows: 30,
+      cols: 160,
+      rows: 40,
       cwd: process.cwd(),
       env: process.env as any
     })
@@ -172,8 +184,8 @@ export async function startServer(options: ServerOptions) {
         for (const line of lines) {
           // Find line with prompt and command (without the output)
           if (line.includes('127.0.0.1:6379>')) {
-            // Strip ANSI codes and extract command after last prompt
-            const stripped = line.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '')
+            // Strip ALL ANSI escape codes (not just color codes)
+            const stripped = line.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\r/g, '')
             const lastPromptIndex = stripped.lastIndexOf('127.0.0.1:6379>')
             if (lastPromptIndex !== -1) {
               const cmd = stripped.substring(lastPromptIndex + 15).trim()
@@ -199,7 +211,21 @@ export async function startServer(options: ServerOptions) {
 
     // Forward WebSocket input to pty
     ws.on('message', (data) => {
-      ptyProcess.write(data.toString())
+      const message = data.toString()
+
+      // Check if this is a resize message
+      try {
+        const parsed = JSON.parse(message)
+        if (parsed.type === 'resize' && parsed.cols && parsed.rows) {
+          console.log(`[SERVER] Resizing PTY to ${parsed.cols}x${parsed.rows}`)
+          ptyProcess.resize(parsed.cols, parsed.rows)
+          return
+        }
+      } catch {
+        // Not JSON, treat as regular terminal input
+      }
+
+      ptyProcess.write(message)
     })
 
     // Handle disconnection
@@ -230,8 +256,8 @@ function processBuffer(
   console.log('[SERVER] processBuffer called with command:', command)
 
   // Extract output by finding text between command and final prompt
-  // Strip ANSI codes
-  const stripped = buffer.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '')
+  // Strip ALL ANSI escape codes (not just color codes)
+  const stripped = buffer.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\r/g, '')
   const lines = stripped.split('\n')
 
   let output = ''
@@ -262,7 +288,8 @@ function processBuffer(
     console.log('[SERVER] Publishing command to Redis:', cmdData)
 
     // Publish to Redis pub/sub channel
-    pubClient.publish('prism:commands', JSON.stringify(cmdData))
+    const channel = process.env.PRISM_COMMAND_CHANNEL || 'prism:commands'
+    pubClient.publish(channel, JSON.stringify(cmdData))
       .then(() => console.log('[SERVER] Published successfully'))
       .catch((err: Error) => console.error('[SERVER] Redis publish error:', err))
   })
