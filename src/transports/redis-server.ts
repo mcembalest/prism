@@ -316,6 +316,94 @@ export async function startServer(options: ServerOptions) {
     #chat-messages::-webkit-scrollbar-thumb:hover {
       background: #4e4e52;
     }
+    #chat-input-container {
+      padding: 15px 20px;
+      border-top: 1px solid #3e3e42;
+      background: #2d2d2d;
+    }
+    #chat-input-wrapper {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    #chat-input {
+      flex: 1;
+      background: #1e1e1e;
+      border: 1px solid #3e3e42;
+      color: #d4d4d4;
+      padding: 10px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    }
+    #chat-input:focus {
+      outline: none;
+      border-color: #007acc;
+    }
+    #chat-input::placeholder {
+      color: #666;
+    }
+    #chat-send-button {
+      background: #007acc;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    #chat-send-button:hover {
+      background: #006bb3;
+    }
+    #chat-send-button:active {
+      background: #005a9e;
+    }
+    .question-container {
+      background: #1a1a1a;
+      border-left: 3px solid #ff8c42;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    .question-title {
+      font-weight: 600;
+      color: #ff8c42;
+      margin-bottom: 10px;
+      font-size: 15px;
+    }
+    .question-options {
+      margin: 15px 0;
+    }
+    .question-option {
+      padding: 10px 15px;
+      margin: 8px 0;
+      background: #2d2d2d;
+      border: 1px solid #3e3e42;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+    }
+    .question-option:hover {
+      background: #3e3e42;
+      border-color: #007acc;
+    }
+    .option-number {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      line-height: 24px;
+      text-align: center;
+      background: #007acc;
+      color: white;
+      border-radius: 50%;
+      margin-right: 10px;
+      font-weight: 600;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -374,6 +462,12 @@ export async function startServer(options: ServerOptions) {
             <div class="message-content">Welcome! Your tutor will guide you through the lesson.</div>
           </div>
         </div>
+        <div id="chat-input-container">
+          <div id="chat-input-wrapper">
+            <input type="text" id="chat-input" placeholder="Type answer, ask a question, or use terminal..." autocomplete="off">
+            <button id="chat-send-button">Send</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -388,23 +482,123 @@ export async function startServer(options: ServerOptions) {
       theme: {
         background: '#1e1e1e',
         foreground: '#d4d4d4'
-      }
+      },
+      scrollback: 1000,
+      convertEol: false,
+      disableStdin: false,
+      cursorStyle: 'block'
     });
 
     const fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
     term.open(document.getElementById('terminal'));
-    fitAddon.fit();
+
+    // Initial fit
+    setTimeout(() => {
+      fitAddon.fit();
+    }, 100);
 
     const ws = new WebSocket('ws://' + window.location.host);
     const chatMessages = document.getElementById('chat-messages');
+    let resizeTimeout;
 
-    // Send terminal size updates to backend
+    // Send terminal size updates to backend with debounce
     function sendResize() {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          const size = { cols: term.cols, rows: term.rows };
+          console.log('Sending resize:', size);
+          // Only send if dimensions are reasonable
+          if (size.cols > 10 && size.rows > 5) {
+            ws.send(JSON.stringify({ type: 'resize', ...size }));
+          }
+        }
+      }, 100);
+    }
+
+    // Enhanced message parsing and rendering
+    function parseMessage(content) {
+      // Check if content contains a multiple choice question
+      const questionMatch = content.match(/^(📝.*?)\\n\\n(.+?)\\n\\n((\\d+\\..+?\\n)+)/s);
+      if (questionMatch) {
+        const prefix = questionMatch[1];
+        const question = questionMatch[2];
+        const optionsText = questionMatch[3];
+        const options = optionsText.trim().split('\\n').filter(o => o.trim());
+
+        return \`
+          <div class="question-container">
+            <div class="question-title">\${prefix}</div>
+            <div>\${question}</div>
+            <div class="question-options">
+              \${options.map(opt => {
+                const match = opt.match(/^(\\d+)\\. (.+)$/);
+                if (match) {
+                  return \`<div class="question-option" onclick="sendAnswer('\${match[1]}')">
+                    <span class="option-number">\${match[1]}</span>
+                    <span>\${match[2]}</span>
+                  </div>\`;
+                }
+                return '';
+              }).join('')}
+            </div>
+            <div style="margin-top: 10px; color: #999; font-size: 13px;">
+              Click an option or type its number in the terminal
+            </div>
+          </div>
+        \`;
+      }
+
+      // Check if content contains a prediction question (similar format)
+      const predictionMatch = content.match(/^(🔮.*?)\\n\\n(.+?)\\n\\n(.+?)\\n\\n((\\d+\\..+?\\n)+)/s);
+      if (predictionMatch) {
+        const prefix = predictionMatch[1];
+        const command = predictionMatch[2];
+        const question = predictionMatch[3];
+        const optionsText = predictionMatch[4];
+        const options = optionsText.trim().split('\\n').filter(o => o.trim());
+
+        return \`
+          <div class="question-container">
+            <div class="question-title">\${prefix}</div>
+            <div style="background: #2d2d2d; padding: 8px; border-radius: 4px; margin: 10px 0; font-family: monospace;">
+              \${command}
+            </div>
+            <div>\${question}</div>
+            <div class="question-options">
+              \${options.map(opt => {
+                const match = opt.match(/^(\\d+)\\. (.+)$/);
+                if (match) {
+                  return \`<div class="question-option" onclick="sendAnswer('\${match[1]}')">
+                    <span class="option-number">\${match[1]}</span>
+                    <span>\${match[2]}</span>
+                  </div>\`;
+                }
+                return '';
+              }).join('')}
+            </div>
+            <div style="margin-top: 10px; color: #999; font-size: 13px;">
+              Click an option or type its number in the terminal
+            </div>
+          </div>
+        \`;
+      }
+
+      // Default: return as-is
+      return content;
+    }
+
+    // Send answer to terminal (called when clicking multiple choice options)
+    function sendAnswer(answer) {
+      const chatInput = document.getElementById('chat-input');
+      chatInput.value = answer;
+      chatInput.focus();
+
+      // Auto-send the answer
       if (ws.readyState === WebSocket.OPEN) {
-        const size = { cols: term.cols, rows: term.rows };
-        console.log('Sending resize:', size);
-        ws.send(JSON.stringify({ type: 'resize', ...size }));
+        ws.send(answer + '\\r');
+        chatInput.value = '';
       }
     }
 
@@ -415,12 +609,14 @@ export async function startServer(options: ServerOptions) {
 
       const icon = type === 'success' ? '✓' : '🎓';
 
+      const parsedContent = parseMessage(content);
+
       messageDiv.innerHTML = \`
         <div class="message-header">
           <span class="message-icon">\${icon}</span>
           <span class="message-sender">Prism Tutor</span>
         </div>
-        <div class="message-content">\${content}</div>
+        <div class="message-content">\${parsedContent}</div>
       \`;
 
       chatMessages.appendChild(messageDiv);
@@ -496,7 +692,11 @@ export async function startServer(options: ServerOptions) {
 
     ws.onopen = () => {
       console.log('Connected to terminal');
-      sendResize();
+      // Wait a bit for terminal to be fully initialized
+      setTimeout(() => {
+        fitAddon.fit();
+        setTimeout(sendResize, 50);
+      }, 200);
     };
 
     ws.onmessage = (event) => {
@@ -540,6 +740,35 @@ export async function startServer(options: ServerOptions) {
         ws.send(JSON.stringify({ type: 'skip-request' }));
       }
     });
+
+    // Chat input handlers
+    const chatInput = document.getElementById('chat-input');
+    const chatSendButton = document.getElementById('chat-send-button');
+
+    function sendChatMessage() {
+      const message = chatInput.value.trim();
+      if (!message) return;
+
+      // Send message to terminal (which handles both answers and questions)
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(message + '\\r');
+      }
+
+      // Clear input
+      chatInput.value = '';
+    }
+
+    chatSendButton.addEventListener('click', sendChatMessage);
+
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendChatMessage();
+      }
+    });
+
+    // Focus chat input by default
+    chatInput.focus();
   </script>
 </body>
 </html>
@@ -560,14 +789,14 @@ export async function startServer(options: ServerOptions) {
       }
     }
 
-    // Spawn redis-cli with large initial size (will be resized by client)
+    // Spawn redis-cli with reasonable initial size (will be resized by client)
     const ptyProcess = pty.spawn('redis-cli', [
       '-h', redisHost,
       '-p', redisPort.toString()
     ], {
-      name: 'xterm-color',
-      cols: 160,
-      rows: 40,
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 24,
       cwd: process.cwd(),
       env: process.env as any
     })
@@ -622,8 +851,15 @@ export async function startServer(options: ServerOptions) {
       try {
         const parsed = JSON.parse(message)
         if (parsed.type === 'resize' && parsed.cols && parsed.rows) {
-          console.log(`[SERVER] Resizing PTY to ${parsed.cols}x${parsed.rows}`)
-          ptyProcess.resize(parsed.cols, parsed.rows)
+          // Validate dimensions before resizing
+          const cols = parseInt(parsed.cols)
+          const rows = parseInt(parsed.rows)
+          if (cols >= 20 && cols <= 500 && rows >= 5 && rows <= 200) {
+            console.log(`[SERVER] Resizing PTY to ${cols}x${rows}`)
+            ptyProcess.resize(cols, rows)
+          } else {
+            console.log(`[SERVER] Ignoring invalid resize: ${cols}x${rows}`)
+          }
           return
         }
         if (parsed.type === 'hint-request') {

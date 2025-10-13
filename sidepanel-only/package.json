@@ -1,0 +1,16 @@
+{
+  "name": "prism-sidepanel-only",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone Progress + Tutor sidepanel demo",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0",
+    "ws": "^8.16.0",
+    "open": "^10.0.0"
+  }
+}
+
