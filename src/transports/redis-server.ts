@@ -6,6 +6,9 @@ import { createServer } from 'http'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { spawn } from 'child_process'
+import { createCommandParser } from '../server/command-parser.js'
+import { PtySession } from '../server/pty-session.js'
+import { deriveCsvFromTerminal, isReadOnlyCommand } from '../server/result-formatter.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -802,7 +805,6 @@ export async function startServer(options: ServerOptions) {
         <div id="chat-messages">
           <div class="message system">
             <div class="message-header">
-              <span class="message-icon">[TUTOR]</span>
               <span class="message-sender">Prism Tutor</span>
             </div>
             <div class="message-content">Welcome! Your tutor will guide you through the lesson.</div>
@@ -1047,18 +1049,40 @@ export async function startServer(options: ServerOptions) {
     };
 
     ws.onmessage = (event) => {
-      // Try to parse as JSON for tutor messages
-      try {
-        const data = JSON.parse(event.data);
-
-        if (data.type === 'tutor-message') {
-          addMessage(data.message, data.messageType || 'tutor');
-        } else if (data.type === 'progress-update') {
-          updateProgress(data);
+      const handleText = (text) => {
+        // Try to parse as JSON for tutor messages; else write to terminal
+        try {
+          const data = JSON.parse(text);
+          if (data && typeof data === 'object' && 'type' in data) {
+            if (data.type === 'tutor-message') {
+              addMessage(data.message, data.messageType || 'tutor');
+              return;
+            }
+            if (data.type === 'progress-update') {
+              updateProgress(data);
+              return;
+            }
+          }
+          // If parsed but not a recognized structured message, treat as terminal output
+          term.write(text);
+        } catch {
+          // Not JSON; treat as terminal data
+          term.write(text);
         }
-      } catch (e) {
-        // Not JSON, treat as terminal data
-        term.write(event.data);
+      };
+
+      if (typeof event.data === 'string') {
+        handleText(event.data);
+      } else if (event.data instanceof Blob) {
+        event.data.text().then(handleText).catch(() => {});
+      } else if (event.data instanceof ArrayBuffer) {
+        const text = new TextDecoder().decode(event.data);
+        handleText(text);
+      } else {
+        // Fallback
+        try {
+          handleText(String(event.data));
+        } catch {}
       }
     };
 
@@ -1178,67 +1202,32 @@ export async function startServer(options: ServerOptions) {
       }
     }
 
-    // Spawn redis-cli with reasonable initial size (will be resized by client)
-    const ptyProcess = pty.spawn('redis-cli', [
-      '-h', redisHost,
-      '-p', redisPort.toString(),
-      '-n', redisDb.toString()  // Select Redis database
-    ], {
-      name: 'xterm-256color',
+    // Spawn redis-cli via PTY session
+    const ptySession = new PtySession({
+      redisHost,
+      redisPort,
+      redisDb,
       cols: 80,
       rows: 24,
-      cwd: process.cwd(),
       env: process.env as any
     })
 
-    let buffer = ''
-    let lastCommandLine = ''
-
     // Build prompt pattern based on database number
-    // Database 0: "127.0.0.1:6379>"
-    // Database N: "127.0.0.1:6379[N]>"
-    const promptPattern = redisDb === 0
-      ? '127.0.0.1:6379>'
-      : `127.0.0.1:6379[${redisDb}]>`
-    const promptRegex = new RegExp(promptPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-
-    // Forward pty output to WebSocket
-    ptyProcess.onData((data) => {
-      ws.send(data)
-
-      // Buffer for command detection
-      buffer += data
-
-      // Detect when user presses Enter (command submitted)
-      if (data.includes('\r\n') && !promptRegex.test(data)) {
-        // User just submitted a command, extract it from buffer
-        const lines = buffer.split('\r\n')
-        for (const line of lines) {
-          // Find line with prompt and command (without the output)
-          if (promptRegex.test(line)) {
-            // Strip ALL ANSI escape codes (not just color codes)
-            const stripped = line.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\r/g, '')
-            const lastPromptIndex = stripped.lastIndexOf(promptPattern)
-            if (lastPromptIndex !== -1) {
-              const cmd = stripped.substring(lastPromptIndex + promptPattern.length).trim()
-              if (cmd && cmd !== lastCommandLine) {
-                lastCommandLine = cmd
-                console.log('[SERVER] Captured command:', cmd)
-                // Clear buffer to start fresh for output capture
-                buffer = ''
-              }
-            }
-          }
-        }
-      }
-
-      // Detect when we're back at prompt after output (command completed)
-      if (lastCommandLine && promptRegex.test(data)) {
+    const promptPattern = redisDb === 0 ? '127.0.0.1:6379>' : `127.0.0.1:6379[${redisDb}]>`
+    const parser = createCommandParser(promptPattern, {
+      onCommandCaptured: (cmd) => {
+        console.log('[SERVER] Captured command:', cmd)
+      },
+      onCommandCompleted: (cmd, output) => {
         console.log('[SERVER] Command completed, processing...')
-        processBuffer(buffer, lastCommandLine, redisPubClient, sessionId)
-        lastCommandLine = ''
-        buffer = ''
+        publishCapturedCommand(output, cmd, redisPubClient, sessionId, redisHost, redisPort, redisDb)
       }
+    })
+
+    // Forward PTY output to WebSocket and feed parser
+    ptySession.onData((data) => {
+      ws.send(data)
+      parser.addData(data)
     })
 
     // Forward WebSocket input to pty
@@ -1254,7 +1243,7 @@ export async function startServer(options: ServerOptions) {
           const rows = parseInt(parsed.rows)
           if (cols >= 20 && cols <= 500 && rows >= 5 && rows <= 200) {
             console.log(`[SERVER] Resizing PTY to ${cols}x${rows}`)
-            ptyProcess.resize(cols, rows)
+            ptySession.resize(cols, rows)
           } else {
             console.log(`[SERVER] Ignoring invalid resize: ${cols}x${rows}`)
           }
@@ -1302,19 +1291,19 @@ export async function startServer(options: ServerOptions) {
         // Not JSON, treat as regular terminal input
       }
 
-      ptyProcess.write(message)
+      ptySession.write(message)
     })
 
     // Handle disconnection
     ws.on('close', () => {
       console.log('[SERVER] Browser disconnected')
-      ptyProcess.kill()
+      ptySession.kill()
       if (browserWs === ws) {
         browserWs = null
       }
     })
 
-    ptyProcess.onExit(() => {
+    ptySession.onExit(() => {
       ws.close()
     })
   })
@@ -1373,43 +1362,27 @@ export async function startServer(options: ServerOptions) {
   return { server, redisPubClient, tutorBridge }
 }
 
-// Parse buffer to extract output and publish to Redis
-function processBuffer(
-  buffer: string,
+  // Parse buffer to extract output and publish to Redis
+function publishCapturedCommand(
+  terminalOutput: string,
   command: string,
   pubClient: any,
-  sessionId: string
+  sessionId: string,
+  redisHost: string,
+  redisPort: number,
+  redisDb: number
 ) {
-  console.log('[SERVER] processBuffer called with command:', command)
+  console.log('[SERVER] Extracted output:', terminalOutput.trim())
 
-  // Extract output by finding text between command and final prompt
-  // Strip ALL ANSI escape codes (not just color codes)
-  const stripped = buffer.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\r/g, '')
-  const lines = stripped.split('\n')
+  const readOnly = isReadOnlyCommand(command)
+  const csvPromise = readOnly
+    ? getCSVOutput(command, { redisHost, redisPort, redisDb })
+    : Promise.resolve(deriveCsvFromTerminal(terminalOutput))
 
-  // Regex to match both prompt formats: "127.0.0.1:6379>" or "127.0.0.1:6379[N]>"
-  const promptRegex = /127\.0\.0\.1:6379(\[\d+\])?>/
-
-  let output = ''
-  let captureOutput = false
-
-  for (const line of lines) {
-    if (captureOutput && !promptRegex.test(line)) {
-      output += line + '\n'
-    }
-    // Start capturing after we see the command being executed
-    if (line.includes(command)) {
-      captureOutput = true
-    }
-  }
-
-  console.log('[SERVER] Extracted output:', output.trim())
-
-  // Get CSV output
-  getCSVOutput(command).then(csvOutput => {
+  csvPromise.then(csvOutput => {
     const cmdData: RedisCommand = {
       command,
-      terminalOutput: output.trim(),
+      terminalOutput: terminalOutput.trim(),
       csvOutput,
       timestamp: new Date().toISOString(),
       sessionId
@@ -1417,7 +1390,6 @@ function processBuffer(
 
     console.log('[SERVER] Publishing command to Redis:', cmdData)
 
-    // Publish to Redis pub/sub channel
     const channel = process.env.PRISM_COMMAND_CHANNEL || 'prism:commands'
     pubClient.publish(channel, JSON.stringify(cmdData))
       .then(() => console.log('[SERVER] Published successfully'))
@@ -1425,9 +1397,17 @@ function processBuffer(
   })
 }
 
-async function getCSVOutput(command: string): Promise<string> {
+// moved: isReadOnlyCommand and deriveCsvFromTerminal are in ../server/result-formatter
+
+async function getCSVOutput(
+  command: string,
+  opts?: { redisHost?: string; redisPort?: number; redisDb?: number }
+): Promise<string> {
   return new Promise((resolve) => {
-    const args = ['--csv', ...command.split(' ')]
+    const host = opts?.redisHost || '127.0.0.1'
+    const port = (opts?.redisPort ?? 6379).toString()
+    const db = (opts?.redisDb ?? 0).toString()
+    const args = ['--csv', '-h', host, '-p', port, '-n', db, ...command.split(' ')]
     const proc = spawn('redis-cli', args)
 
     let output = ''
