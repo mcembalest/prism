@@ -1,0 +1,134 @@
+{
+  "skills": [
+    {
+      "id": "redis-string-basic",
+      "name": "Set and get string values",
+      "prerequisites": [],
+      "validationActions": [
+        {
+          "actionPattern": "SET \\w+ .+",
+          "expectedOutput": "OK"
+        },
+        {
+          "actionPattern": "GET \\w+",
+          "expectedOutput": "The value that was previously set"
+        }
+      ]
+    },
+    {
+      "id": "redis-string-counter",
+      "name": "Use strings as counters with INCR",
+      "prerequisites": ["redis-string-basic"],
+      "validationActions": [
+        {
+          "actionPattern": "SET \\w+ \\d+",
+          "expectedOutput": "OK"
+        },
+        {
+          "actionPattern": "INCR \\w+",
+          "expectedOutput": "(integer) with incremented value"
+        }
+      ]
+    },
+    {
+      "id": "redis-hash-create",
+      "name": "Create and set hash fields",
+      "prerequisites": ["redis-string-basic"],
+      "validationActions": [
+        {
+          "actionPattern": "HSET [\\w:]+ \\w+ .+",
+          "expectedOutput": "(integer) 1 when creating a new field, (integer) 0 when updating existing field"
+        }
+      ]
+    },
+    {
+      "id": "redis-hash-retrieve",
+      "name": "Retrieve individual hash fields",
+      "prerequisites": ["redis-hash-create"],
+      "validationActions": [
+        {
+          "actionPattern": "HGET [\\w:]+ \\w+",
+          "expectedOutput": "The value of the specified field"
+        }
+      ]
+    },
+    {
+      "id": "redis-hash-getall",
+      "name": "Retrieve all fields from a hash",
+      "prerequisites": ["redis-hash-retrieve"],
+      "validationActions": [
+        {
+          "actionPattern": "HGETALL [\\w:]+",
+          "expectedOutput": "Array of alternating field names and values (1) field1 2) value1 3) field2 4) value2...)"
+        }
+      ]
+    },
+    {
+      "id": "redis-hash-increment",
+      "name": "Increment numeric hash fields",
+      "prerequisites": ["redis-hash-retrieve"],
+      "validationActions": [
+        {
+          "actionPattern": "HINCRBY [\\w:]+ \\w+ -?\\d+",
+          "expectedOutput": "(integer) with the new value after incrementing"
+        }
+      ]
+    },
+    {
+      "id": "redis-list-push",
+      "name": "Push elements to lists",
+      "prerequisites": ["redis-string-basic"],
+      "validationActions": [
+        {
+          "actionPattern": "LPUSH \\w+ .+",
+          "expectedOutput": "(integer) with the new length of the list"
+        },
+        {
+          "actionPattern": "RPUSH \\w+ .+",
+          "expectedOutput": "(integer) with the new length of the list"
+        }
+      ]
+    },
+    {
+      "id": "redis-list-range",
+      "name": "View elements in a list",
+      "prerequisites": ["redis-list-push"],
+      "validationActions": [
+        {
+          "actionPattern": "LRANGE \\w+ -?\\d+ -?\\d+",
+          "expectedOutput": "Array of elements in the specified range"
+        }
+      ]
+    },
+    {
+      "id": "redis-list-pop",
+      "name": "Pop elements from lists",
+      "prerequisites": ["redis-list-push"],
+      "validationActions": [
+        {
+          "actionPattern": "LPOP \\w+",
+          "expectedOutput": "The leftmost element, removed from the list"
+        },
+        {
+          "actionPattern": "RPOP \\w+",
+          "expectedOutput": "The rightmost element, removed from the list"
+        }
+      ]
+    },
+    {
+      "id": "redis-list-queue",
+      "name": "Use lists as FIFO queues",
+      "prerequisites": ["redis-list-push", "redis-list-pop"],
+      "validationActions": [
+        {
+          "actionPattern": "RPUSH \\w+ .+",
+          "expectedOutput": "(integer) with the new length"
+        },
+        {
+          "actionPattern": "LPOP \\w+",
+          "expectedOutput": "The oldest element (first in, first out)"
+        }
+      ]
+    }
+  ]
+}

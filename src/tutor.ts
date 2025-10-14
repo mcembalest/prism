@@ -1,10 +1,11 @@
-import { startLearningEnvironment } from './environment.js'
-import type { SessionContext, LessonPlan, Exercise } from './types.js'
+import { startLearningEnvironment, type LearningEnvironment } from './environment.js'
+import type { SessionContext, LessonPlan, Exercise, SkillGraph, Activity, CourseManifest } from './types.js'
 import * as readline from 'readline'
 import { readdir, readFile } from 'fs/promises'
 import path from 'path'
 import { createCommandStream, type CapturedCommand } from './command-stream.js'
 import { findResponseForQuestion, getEncouragement, getWrongAnswerResponse } from './mock-responses.js'
+import { getStateManager } from './session-state-manager.js'
 
 /**
  * Prism Tutor Process
@@ -23,9 +24,10 @@ interface SessionState {
   tutorBridge?: any // Will be set after environment starts
   exerciseStates: string[] // 'untouched', 'current', 'completed', 'skipped'
   currentExerciseStep?: 'presenting' | 'awaiting-answer' | 'completed' // For multi-step exercises
-  awaitingAnswerFor?: 'question' | 'prediction' | 'explanation' | 'worked-example-check'
-  currentQuestionData?: any // Store current question data for validation
+  currentQuestionData?: any // Store current exercise data for validation
   hintLevel: number // Track progressive hint level (1, 2, 3)
+  redisDb: number // Redis database number for this session
+  lessonId: string // Stable lesson identifier (for state management)
 }
 
 // Prompt user to select a lesson from available options
@@ -38,60 +40,64 @@ async function getUserLessonSelection(artifacts: CourseArtifacts): Promise<strin
   return new Promise((resolve) => {
     console.log()
     console.log('╔' + '═'.repeat(68) + '╗')
-    console.log('║' + ' '.repeat(20) + '📚 Available Lessons' + ' '.repeat(28) + '║')
+    console.log('║' + ' '.repeat(20) + 'AVAILABLE LESSONS' + ' '.repeat(30) + '║')
     console.log('╚' + '═'.repeat(68) + '╝')
     console.log()
 
-    // List all available lessons with numbers
-    const lessons = artifacts.lessons
-    lessons.forEach((lesson, index) => {
-      const levelBadge = lesson.level === 'beginner' ? '🟢' : lesson.level === 'intermediate' ? '🟡' : '🔴'
+    // NEW: Prefer activities if available, otherwise use legacy lessons
+    const displayItems = artifacts.activities || artifacts.lessons
+    displayItems.forEach((item, index) => {
+      const level = 'level' in item ? item.level : 'beginner'
+      const levelBadge = level === 'beginner' ? '🟢' : level === 'intermediate' ? '🟡' : '🔴'
       const number = `[${index + 1}]`.padEnd(4)
-      console.log(`  ${number} ${levelBadge} ${lesson.topic}`)
-      console.log(`       ${lesson.summary}`)
+      const name = 'name' in item ? item.name : ('topic' in item ? item.topic : 'Lesson')
+      const summary = item.summary || ''
+      console.log(`  ${number} ${levelBadge} ${name}`)
+      console.log(`       ${summary}`)
       console.log()
     })
 
     // Add OTHER option
-    const otherNumber = `[${lessons.length + 1}]`.padEnd(4)
-    console.log(`  ${otherNumber} ✨ OTHER - Make your own lesson`)
-    console.log(`       Describe what you'd like to learn about Redis`)
+    const otherNumber = `[${displayItems.length + 1}]`.padEnd(4)
+    console.log(`  ${otherNumber} OTHER - Make your own lesson`)
+    console.log(`       Describe what you'd like to learn about`)
     console.log()
     console.log('─'.repeat(70))
-    console.log('💡 After you select, your browser will open with the learning environment.')
+    console.log('NOTE: After you select, your browser will open with the learning environment.')
     console.log('─'.repeat(70))
     console.log()
 
     function askForSelection() {
-      rl.question(`\x1b[36m➜\x1b[0m Select a lesson (1-${lessons.length + 1}): `, (answer) => {
+      rl.question(`\x1b[36m➜\x1b[0m Select a lesson (1-${displayItems.length + 1}): `, (answer) => {
         const selection = parseInt(answer.trim())
 
-        if (isNaN(selection) || selection < 1 || selection > lessons.length + 1) {
-          console.log(`\x1b[31m✗\x1b[0m Please enter a number between 1 and ${lessons.length + 1}`)
+        if (isNaN(selection) || selection < 1 || selection > displayItems.length + 1) {
+          console.log(`\x1b[31mERROR:\x1b[0m Please enter a number between 1 and ${displayItems.length + 1}`)
           console.log()
           askForSelection()
           return
         }
 
-        if (selection === lessons.length + 1) {
+        if (selection === displayItems.length + 1) {
           // OTHER option - ask for custom input
           console.log()
-          console.log('✨ Custom Lesson')
+          console.log('Custom Lesson')
           console.log()
           rl.question('\x1b[36m➜\x1b[0m What would you like to learn about? ', (customAnswer) => {
             rl.close()
-            const goal = customAnswer.trim() || 'redis basics'
+            const goal = customAnswer.trim() || 'basics'
             console.log()
-            console.log(`\x1b[32m✓\x1b[0m Got it! Let's learn about: ${goal}`)
+            console.log(`\x1b[32mOK:\x1b[0m Got it! Let's learn about: ${goal}`)
             resolve(goal)
           })
         } else {
-          // Selected a specific lesson
-          const selectedLesson = lessons[selection - 1]
+          // Selected a specific lesson/activity
+          const selectedItem = displayItems[selection - 1]
+          const name = 'name' in selectedItem ? selectedItem.name : ('topic' in selectedItem ? selectedItem.topic : 'Lesson')
           console.log()
-          console.log(`\x1b[32m✓\x1b[0m Great choice! Starting: ${selectedLesson.topic}`)
+          console.log(`\x1b[32mOK:\x1b[0m Great choice! Starting: ${name}`)
           rl.close()
-          resolve(selectedLesson.topic)
+          resolve(name)
         }
       })
     }
@@ -109,8 +115,11 @@ interface DiagnosticDef {
 }
 
 interface CourseArtifacts {
-  diagnostics: DiagnosticDef[]
-  lessons: LessonPlan[]
+  diagnostics: DiagnosticDef[]  // Legacy: still loaded from markdown files
+  lessons: LessonPlan[]          // Legacy: still loaded from markdown files
+  skillGraph?: SkillGraph        // NEW: loaded from skills.json
+  activities?: Activity[]        // NEW: loaded from activities.json
+  manifest?: CourseManifest      // NEW: loaded from course.json
 }
 
 // Loaded course artifacts cache for this process
@@ -124,6 +133,7 @@ async function loadCourseArtifacts(courseId: string): Promise<CourseArtifacts> {
   const diagnostics: DiagnosticDef[] = []
   const lessons: LessonPlan[] = []
 
+  // Legacy: Load from markdown files with embedded JSON
   for (const f of mdFiles) {
     const fullPath = path.join(baseDir, f)
     const content = await readFile(fullPath, 'utf8')
@@ -153,32 +163,130 @@ async function loadCourseArtifacts(courseId: string): Promise<CourseArtifacts> {
     }
   }
 
-  return { diagnostics, lessons }
+  // NEW: Load skill graph from skills.json
+  let skillGraph: SkillGraph | undefined
+  try {
+    const skillsPath = path.join(baseDir, 'skills.json')
+    const skillsContent = await readFile(skillsPath, 'utf8')
+    skillGraph = JSON.parse(skillsContent) as SkillGraph
+  } catch (err) {
+    console.log('[TUTOR] No skills.json found, using legacy structure')
+  }
+
+  // NEW: Load activities from activities.json
+  let activities: Activity[] | undefined
+  try {
+    const activitiesPath = path.join(baseDir, 'activities.json')
+    const activitiesContent = await readFile(activitiesPath, 'utf8')
+    const activitiesData = JSON.parse(activitiesContent) as { activities: Activity[] }
+    activities = activitiesData.activities
+  } catch (err) {
+    console.log('[TUTOR] No activities.json found, using legacy structure')
+  }
+
+  // NEW: Load course manifest from course.json
+  let manifest: CourseManifest | undefined
+  try {
+    const manifestPath = path.join(baseDir, 'course.json')
+    const manifestContent = await readFile(manifestPath, 'utf8')
+    manifest = JSON.parse(manifestContent) as CourseManifest
+  } catch (err) {
+    console.log('[TUTOR] No course.json found, using legacy structure')
+  }
+
+  return { diagnostics, lessons, skillGraph, activities, manifest }
 }
 
 function pickDiagnostic(userGoal: string, artifacts: CourseArtifacts): { def: DiagnosticDef; firstCommand: string } {
   const goal = (userGoal || '').toLowerCase()
-  // Try keyword match
+
+  // NEW: Try matching activities first
+  if (artifacts.activities) {
+    for (const activity of artifacts.activities) {
+      // Match by name or diagnostic keywords
+      const nameMatch = activity.name.toLowerCase().includes(goal) || goal.includes(activity.name.toLowerCase())
+      const keywordMatch = activity.diagnostic?.keywords?.some(k => goal.includes(k.toLowerCase()))
+
+      if (nameMatch || keywordMatch) {
+        // Convert Activity diagnostic to DiagnosticDef format
+        const def: DiagnosticDef = {
+          topic: activity.name,
+          lessonTopic: activity.name,
+          keywords: activity.diagnostic?.keywords || [],
+          diagnostics: activity.diagnostic?.commands || []
+        }
+        return { def, firstCommand: def.diagnostics[0] || 'PING' }
+      }
+    }
+  }
+
+  // Legacy: Try keyword match from markdown diagnostics
   for (const def of artifacts.diagnostics) {
     if (def.keywords.some(k => goal.includes(k.toLowerCase()))) {
       return { def, firstCommand: def.diagnostics[0] }
     }
   }
-  // Fallback: first available
+
+  // Fallback: use first available activity or diagnostic
+  if (artifacts.activities && artifacts.activities.length > 0) {
+    const firstActivity = artifacts.activities[0]
+    const def: DiagnosticDef = {
+      topic: firstActivity.name,
+      lessonTopic: firstActivity.name,
+      keywords: firstActivity.diagnostic?.keywords || [],
+      diagnostics: firstActivity.diagnostic?.commands || []
+    }
+    return { def, firstCommand: def.diagnostics[0] || 'PING' }
+  }
+
   const fallback = artifacts.diagnostics[0] || { topic: 'Getting Started', keywords: [], diagnostics: [] }
   return { def: fallback as DiagnosticDef, firstCommand: fallback.diagnostics[0] }
 }
 
 function findLessonForDiagnostic(artifacts: CourseArtifacts, def: DiagnosticDef): LessonPlan | null {
+  // NEW: Try activities first
+  if (artifacts.activities) {
+    let match: Activity | undefined
+    if (def.lessonTopic) {
+      match = artifacts.activities.find(a => a.name.trim().toLowerCase() === def.lessonTopic!.trim().toLowerCase())
+    }
+    if (!match) {
+      match = artifacts.activities.find(a => a.name.toLowerCase().includes(def.topic.toLowerCase()))
+    }
+    if (match) {
+      // Convert Activity to LessonPlan format
+      return {
+        lessonId: match.id,
+        topic: match.name,
+        level: match.level,
+        exercises: match.exercises,
+        summary: match.summary
+      }
+    }
+  }
+
+  // Fallback to legacy lessons
   if (def.lessonTopic) {
     const match = artifacts.lessons.find(l => l.topic.trim().toLowerCase() === def.lessonTopic!.trim().toLowerCase())
     if (match) return match
   }
-  // Try startsWith/contains topic
   const byPrefix = artifacts.lessons.find(l => l.topic.toLowerCase().startsWith(def.topic.toLowerCase()))
   if (byPrefix) return byPrefix
   const byContains = artifacts.lessons.find(l => l.topic.toLowerCase().includes(def.topic.toLowerCase()))
   if (byContains) return byContains
+
+  // Last resort: convert first activity to lesson
+  if (artifacts.activities && artifacts.activities.length > 0) {
+    const firstActivity = artifacts.activities[0]
+    return {
+      lessonId: firstActivity.id,
+      topic: firstActivity.name,
+      level: firstActivity.level,
+      exercises: firstActivity.exercises,
+      summary: firstActivity.summary
+    }
+  }
+
   return artifacts.lessons[0] || null
 }
 
@@ -200,36 +308,71 @@ function stripAnsiCodes(str: string): string {
   return str.replace(/\x1B\[[0-9;]*[A-Za-z]/g, '')
 }
 
-// Evaluate command locally - only for command-type exercises
+// Evaluate command locally - watch what they do in Redis CLI
 function evaluateLocally(state: SessionState, cmd: CapturedCommand): string | null {
   if (!state.lessonPlan || state.currentExerciseIndex >= state.lessonPlan.exercises.length) {
     return null
   }
 
   const currentExercise = state.lessonPlan.exercises[state.currentExerciseIndex]
+  const cleanCommand = stripAnsiCodes(cmd.command).trim().toUpperCase()
 
-  // Only evaluate commands for command-type exercises
-  if (currentExercise.type !== 'command') {
-    return null
+  // Handle different exercise types
+  if (currentExercise.type === 'command') {
+    const expectedCommand = currentExercise.command.trim().toUpperCase()
+    const commandMatches = cleanCommand === expectedCommand
+
+    if (commandMatches) {
+      if (currentExercise.expectedPattern) {
+        const pattern = new RegExp(currentExercise.expectedPattern, 'i')
+        if (!pattern.test(cmd.terminalOutput)) {
+          return `Hmm, the output doesn't look right. ${currentExercise.hint || 'Try again!'}`
+        }
+      }
+
+      let successMsg = `${currentExercise.feedback}`
+      if (currentExercise.teachingPoint) {
+        successMsg += `\n\n💡 ${currentExercise.teachingPoint}`
+      }
+
+      markExerciseComplete(state)
+      const nextMsg = moveToNextExercise(state)
+      return `${successMsg}\n\n${nextMsg}`
+    }
   }
 
-  const cleanCommand = stripAnsiCodes(cmd.command).trim().toUpperCase()
-  const expectedCommand = currentExercise.command.trim().toUpperCase()
-  const commandMatches = cleanCommand === expectedCommand
+  if (currentExercise.type === 'teach' && state.currentQuestionData) {
+    const teachData = state.currentQuestionData as any
+    const currentCmdIndex = teachData.currentCommandIndex || 0
+    const expectedCommand = currentExercise.guidedCommands[currentCmdIndex].command.trim().toUpperCase()
 
-  if (commandMatches) {
-    if (currentExercise.expectedPattern) {
-      const pattern = new RegExp(currentExercise.expectedPattern, 'i')
-      if (!pattern.test(cmd.terminalOutput)) {
-        return `Hmm, the output doesn't look right. ${currentExercise.hint || 'Try again!'}`
+    if (cleanCommand === expectedCommand) {
+      const guidedCmd = currentExercise.guidedCommands[currentCmdIndex]
+      let successMsg = `Great! ${guidedCmd.teachingPoint}`
+
+      // Move to next command in sequence or complete
+      if (currentCmdIndex + 1 < currentExercise.guidedCommands.length) {
+        const nextCmd = currentExercise.guidedCommands[currentCmdIndex + 1]
+        state.currentQuestionData = { ...currentExercise, currentCommandIndex: currentCmdIndex + 1 }
+        successMsg += `\n\n${nextCmd.prompt}\n\nTry: ${nextCmd.command}`
+        sendTutorMessage(state, successMsg)
+        return successMsg
+      } else {
+        markExerciseComplete(state)
+        const nextMsg = moveToNextExercise(state)
+        return `${successMsg}\n\n${nextMsg}`
       }
     }
+  }
 
-    // Mark current exercise as completed
-    markExerciseComplete(state)
-    const nextMsg = moveToNextExercise(state)
-
-    return `✓ ${currentExercise.feedback}\n\n${nextMsg}`
+  if (currentExercise.type === 'worked-example' && currentExercise.followUpCommand && state.currentQuestionData) {
+    const expectedCommand = currentExercise.followUpCommand.command.trim().toUpperCase()
+    if (cleanCommand === expectedCommand) {
+      const successMsg = `Excellent! ${currentExercise.followUpCommand.teachingPoint}`
+      markExerciseComplete(state)
+      const nextMsg = moveToNextExercise(state)
+      return `${successMsg}\n\n${nextMsg}`
+    }
   }
 
   return null
@@ -251,14 +394,10 @@ function sendProgressUpdate(state: SessionState) {
     if (currentEx) {
       if (currentEx.type === 'command') {
         exerciseText = currentEx.command
-      } else if (currentEx.type === 'conceptual-question' || currentEx.type === 'review') {
-        exerciseText = `Question: ${currentEx.question?.substring(0, 40)}...`
-      } else if (currentEx.type === 'prediction') {
-        exerciseText = `Predict: ${currentEx.command}`
+      } else if (currentEx.type === 'teach') {
+        exerciseText = `Learning: ${currentEx.content?.substring(0, 40)}...`
       } else if (currentEx.type === 'worked-example') {
         exerciseText = `Example: ${currentEx.title}`
-      } else if (currentEx.type === 'explanation') {
-        exerciseText = `Explain: ${currentEx.command}`
       }
     }
 
@@ -274,139 +413,48 @@ function sendProgressUpdate(state: SessionState) {
 
 // Present an exercise based on its type
 function presentExercise(state: SessionState, exercise: Exercise): string {
+  state.currentExerciseStep = 'awaiting-answer'
+
   switch (exercise.type) {
     case 'command':
-      return `Try this: ${exercise.command}`
+      return `${exercise.prompt}\n\nTry: ${exercise.command}`
 
-    case 'conceptual-question':
-    case 'review':
-      state.awaitingAnswerFor = 'question'
-      state.currentQuestionData = exercise
-      state.currentExerciseStep = 'awaiting-answer'
-
-      const questionPrefix = exercise.type === 'review'
-        ? `📝 Review: ${exercise.reviewTopic}\n\n`
-        : '📝 Question:\n\n'
-
-      const optionsText = exercise.options
-        .map((opt: string, i: number) => `${i + 1}. ${opt}`)
-        .join('\n')
-
-      return `${questionPrefix}${exercise.question}\n\n${optionsText}\n\nType the number of your answer (or ask a question if you're unsure!)`
-
-    case 'prediction':
-      state.awaitingAnswerFor = 'prediction'
-      state.currentQuestionData = exercise
-      state.currentExerciseStep = 'awaiting-answer'
-
-      const predOptionsText = exercise.options
-        .map((opt: string, i: number) => `${i + 1}. ${opt}`)
-        .join('\n')
-
-      return `🔮 Before you run this command, predict what will happen:\n\n${exercise.command}\n\n${exercise.question}\n\n${predOptionsText}\n\nType the number of your prediction:`
+    case 'teach':
+      // Present teaching content, then guide through first command
+      const firstCmd = exercise.guidedCommands[0]
+      state.currentQuestionData = { ...exercise, currentCommandIndex: 0 }
+      return `${exercise.content}\n\n${firstCmd.prompt}\n\nTry: ${firstCmd.command}`
 
     case 'worked-example':
-      state.currentExerciseStep = 'presenting'
-      state.currentQuestionData = exercise
-
-      let exampleText = `📚 Worked Example: ${exercise.title}\n\n`
-      exampleText += 'Let me show you how this works step by step:\n\n'
+      // Demonstrate by showing what to expect, then they can try
+      let exampleText = `[EXAMPLE: ${exercise.title}]\n\n${exercise.narration}\n\n`
 
       exercise.steps.forEach((step: any, i: number) => {
-        exampleText += `Step ${i + 1}: ${step.narration}\n`
-        exampleText += `Command: ${step.command}\n`
-        if (step.output) {
-          exampleText += `Output: ${step.output}\n`
+        exampleText += `${step.explanation}\n`
+        exampleText += `→ ${step.command}\n`
+        if (step.expectedOutput) {
+          exampleText += `  Output: ${step.expectedOutput}\n`
         }
         exampleText += '\n'
       })
 
-      // After presenting, ask follow-up question
-      setTimeout(() => {
-        state.awaitingAnswerFor = 'worked-example-check'
-        state.currentExerciseStep = 'awaiting-answer'
-
-        const followUpOptionsText = exercise.options
-          .map((opt: string, i: number) => `${i + 1}. ${opt}`)
-          .join('\n')
-
-        const followUpMsg = `\n${exercise.followUpQuestion}\n\n${followUpOptionsText}\n\nType the number of your answer:`
-        sendTutorMessage(state, followUpMsg)
-      }, 2000)
+      if (exercise.followUpCommand) {
+        exampleText += `\nNow you try: ${exercise.followUpCommand.prompt}\n`
+        exampleText += `Try: ${exercise.followUpCommand.command}`
+        state.currentQuestionData = exercise.followUpCommand
+      } else {
+        // Auto-complete if no follow-up
+        setTimeout(() => {
+          markExerciseComplete(state)
+          const nextMsg = moveToNextExercise(state)
+          sendTutorMessage(state, nextMsg)
+        }, 1000)
+      }
 
       return exampleText
 
-    case 'explanation':
-      state.awaitingAnswerFor = 'explanation'
-      state.currentQuestionData = exercise
-      state.currentExerciseStep = 'awaiting-answer'
-
-      return `💭 Explanation Task:\n\nConsider this command: ${exercise.command}\n\n${exercise.question}\n\nType your explanation (include keywords like: ${exercise.acceptedKeywords.join(', ')})`
-
     default:
       return 'Unknown exercise type'
-  }
-}
-
-// Handle student answer to a question
-function handleStudentAnswer(state: SessionState, answer: string): string {
-  if (!state.currentQuestionData || !state.awaitingAnswerFor) {
-    return 'No question is currently active.'
-  }
-
-  const answerNum = parseInt(answer.trim())
-
-  switch (state.awaitingAnswerFor) {
-    case 'question':
-    case 'prediction':
-    case 'worked-example-check': {
-      const exercise = state.currentQuestionData
-      const correctIndex = exercise.correctIndex
-
-      if (isNaN(answerNum) || answerNum < 1 || answerNum > exercise.options.length) {
-        return 'Please enter a valid option number (1-' + exercise.options.length + ')'
-      }
-
-      if (answerNum - 1 === correctIndex) {
-        // Correct answer!
-        const encouragement = getEncouragement()
-        const explanation = exercise.explanation || ''
-
-        markExerciseComplete(state)
-        const nextMsg = moveToNextExercise(state)
-
-        return `${encouragement}\n\n${explanation}\n\n${nextMsg}`
-      } else {
-        // Wrong answer
-        const wrongResponse = getWrongAnswerResponse()
-        const explanation = exercise.explanation || ''
-
-        return `${wrongResponse}\n\n${explanation}\n\nTry again, or ask a question if you need help!`
-      }
-    }
-
-    case 'explanation': {
-      const exercise = state.currentQuestionData
-      const answerLower = answer.toLowerCase()
-
-      // Check if answer contains required keywords
-      const hasKeywords = exercise.acceptedKeywords.some((kw: string) =>
-        answerLower.includes(kw.toLowerCase())
-      )
-
-      if (hasKeywords) {
-        const encouragement = getEncouragement()
-        markExerciseComplete(state)
-        const nextMsg = moveToNextExercise(state)
-
-        return `${encouragement}\n\nGreat explanation! Here's a model answer:\n\n${exercise.sampleAnswer}\n\n${nextMsg}`
-      } else {
-        return `Good effort! Your explanation could mention: ${exercise.acceptedKeywords.join(', ')}. Try elaborating!`
-      }
-    }
-
-    default:
-      return 'Unknown question type'
   }
 }
 
@@ -415,7 +463,6 @@ function markExerciseComplete(state: SessionState) {
   if (state.lessonPlan && state.currentExerciseIndex < state.lessonPlan.exercises.length) {
     state.exerciseStates[state.currentExerciseIndex] = 'completed'
     state.currentExerciseStep = 'completed'
-    state.awaitingAnswerFor = undefined
     state.currentQuestionData = undefined
     state.hintLevel = 1 // Reset hint level for next exercise
   }
@@ -436,7 +483,36 @@ function moveToNextExercise(state: SessionState): string {
     return presentExercise(state, nextExercise)
   } else {
     sendProgressUpdate(state)
-    return `🎉 Lesson complete! You've finished ${state.lessonPlan.topic}.`
+
+    // Lesson complete - handle state saving asynchronously
+    setTimeout(async () => {
+      try {
+        const shouldSave = await promptSaveState()
+        const stateManager = getStateManager()
+
+        // Use stable lessonId (from lesson plan if available, else from state)
+        const stableLessonId = state.lessonPlan?.lessonId || state.lessonId
+        const lessonTopic = state.lessonPlan?.topic || state.currentTopic
+
+        if (shouldSave) {
+          await stateManager.saveLessonState(
+            stableLessonId,
+            lessonTopic,
+            state.redisDb,
+            state.context.sessionId
+          )
+          console.log('[TUTOR] Progress saved')
+        } else {
+          await stateManager.flushDatabase(state.redisDb)
+          await stateManager.clearLessonState(stableLessonId)
+          console.log('[TUTOR] Data cleared')
+        }
+      } catch (err) {
+        console.error('[TUTOR] Error handling lesson completion:', err)
+      }
+    }, 2000)
+
+    return `[COMPLETE] Lesson complete! You've finished ${state.lessonPlan.topic}.`
   }
 }
 
@@ -445,21 +521,12 @@ function handleStudentQuestion(state: SessionState, question: string): string {
   console.log('[TUTOR] Student asked:', question)
 
   const response = findResponseForQuestion(question)
-  return `📖 ${response}`
+  return `[ANSWER] ${response}`
 }
 
 // Handle command from learning environment
 async function handleCommand(state: SessionState, cmd: CapturedCommand): Promise<string> {
-  // Check if this is a text input for a question answer
   const trimmedCmd = cmd.command.trim()
-
-  // If awaiting answer and input looks like answer (number or text), treat as answer
-  if (state.awaitingAnswerFor && (trimmedCmd.match(/^\d+$/) || trimmedCmd.length > 3)) {
-    const response = handleStudentAnswer(state, trimmedCmd)
-    sendTutorMessage(state, response, response.includes('✓') || response.includes('Excellent') ? 'success' : 'tutor')
-    sendProgressUpdate(state)
-    return response
-  }
 
   // Check if this looks like a question (starts with what, why, how, when, etc.)
   const questionWords = ['what', 'why', 'how', 'when', 'where', 'which', 'who', 'can', 'should', 'is', 'does']
@@ -475,7 +542,7 @@ async function handleCommand(state: SessionState, cmd: CapturedCommand): Promise
     if (state.diagnosticCommands.length >= 2) {
       console.log('[TUTOR] Calibrating lesson...')
 
-      sendTutorMessage(state, '⚡ Calibrating your lesson...')
+      sendTutorMessage(state, '[CALIBRATING] Calibrating your lesson...')
 
       const lessonPlan = await generatePersonalizedLesson(
         state.context,
@@ -498,7 +565,7 @@ async function handleCommand(state: SessionState, cmd: CapturedCommand): Promise
 
         const firstExercise = lessonPlan.exercises[0]
         const exerciseMessage = presentExercise(state, firstExercise)
-        const message = `📚 ${lessonPlan.topic} (${lessonPlan.level})\n${lessonPlan.summary}\n\n${exerciseMessage}`
+        const message = `[LESSON: ${lessonPlan.topic}] (${lessonPlan.level})\n${lessonPlan.summary}\n\n${exerciseMessage}`
         sendTutorMessage(state, message)
         return message
       } else {
@@ -522,13 +589,13 @@ async function handleCommand(state: SessionState, cmd: CapturedCommand): Promise
 
   const localEval = evaluateLocally(state, cmd)
   if (localEval) {
-    const isSuccess = localEval.includes('✓')
+    const isSuccess = localEval.includes('[SUCCESS]')
     sendTutorMessage(state, localEval, isSuccess ? 'success' : 'tutor')
     sendProgressUpdate(state)
     return localEval
   }
 
-  const message = '🤔 That\'s not what I expected. Try the suggested command!'
+  const message = '[HINT] That\'s not what I expected. Try the suggested command!'
   sendTutorMessage(state, message)
   return message
 }
@@ -552,110 +619,120 @@ function handleHintRequest(state: SessionState) {
   // Progressive hints: gentle -> specific -> explicit
   let hint: string
   if (state.hintLevel === 1) {
-    hint = '💡 Hint (Level 1): Think about the data structure you\'re working with. What operations does it support?'
+    hint = '[HINT Level 1] Think about the data structure you\'re working with. What operations does it support?'
     state.hintLevel = 2
   } else if (state.hintLevel === 2) {
-    hint = '💡 Hint (Level 2): Review the command syntax carefully. Make sure you have the right order of arguments.'
+    hint = '[HINT Level 2] Review the command syntax carefully. Make sure you have the right order of arguments.'
     state.hintLevel = 3
   } else {
-    hint = `💡 Hint (Level 3): ${currentExercise.hint || 'Try following the exact command suggested!'}`
+    hint = `[HINT Level 3] ${currentExercise.hint || 'Try following the exact command suggested!'}`
     // Keep at level 3
   }
 
   sendTutorMessage(state, hint)
 }
 
-// Handle skip request from user
-function handleSkipRequest(state: SessionState) {
-  console.log('[TUTOR] Skip requested')
+// Prompt user about state management before starting lesson
+async function promptStateManagement(lessonTopic: string, hasState: boolean): Promise<'resume' | 'clear'> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  })
 
-  if (state.mode !== 'lesson' || !state.lessonPlan) {
-    sendTutorMessage(state, 'Nothing to skip during diagnostic phase.')
-    return
-  }
+  return new Promise((resolve) => {
+    if (!hasState) {
+      // No saved state, default to clear (fresh start)
+      resolve('clear')
+      return
+    }
 
-  if (state.currentExerciseIndex >= state.lessonPlan.exercises.length) {
-    sendTutorMessage(state, 'You\'ve completed all exercises!')
-    return
-  }
+    console.log()
+    console.log('╔' + '═'.repeat(68) + '╗')
+    console.log('║' + ' '.repeat(20) + 'SAVED PROGRESS FOUND' + ' '.repeat(27) + '║')
+    console.log('╚' + '═'.repeat(68) + '╝')
+    console.log()
+    console.log(`  This lesson has saved Redis data from a previous session.`)
+    console.log()
+    console.log('  [1] Resume with saved data')
+    console.log('  [2] Start fresh (clear all Redis keys)')
+    console.log()
 
-  // Mark current exercise as skipped
-  state.exerciseStates[state.currentExerciseIndex] = 'skipped'
-  state.awaitingAnswerFor = undefined
-  state.currentQuestionData = undefined
+    function askForChoice() {
+      rl.question('\x1b[36m➜\x1b[0m Your choice (1-2): ', (answer) => {
+        const choice = parseInt(answer.trim())
 
-  // Move to next exercise
-  state.currentExerciseIndex++
+        if (choice === 1) {
+          console.log()
+          console.log('\x1b[32mOK:\x1b[0m Resuming with saved data')
+          rl.close()
+          resolve('resume')
+        } else if (choice === 2) {
+          console.log()
+          console.log('\x1b[32mOK:\x1b[0m Starting fresh - clearing Redis state')
+          rl.close()
+          resolve('clear')
+        } else {
+          console.log('\x1b[31mERROR:\x1b[0m Please enter 1 or 2')
+          console.log()
+          askForChoice()
+        }
+      })
+    }
 
-  // Mark next exercise as current if there is one
-  if (state.currentExerciseIndex < state.lessonPlan.exercises.length) {
-    state.exerciseStates[state.currentExerciseIndex] = 'current'
-    state.hintLevel = 1
-  }
-
-  if (state.currentExerciseIndex >= state.lessonPlan.exercises.length) {
-    const message = `You've reached the end of the lesson. You skipped some exercises - consider reviewing them later!`
-    sendTutorMessage(state, message)
-    sendProgressUpdate(state)
-    return
-  }
-
-  const nextExercise = state.lessonPlan.exercises[state.currentExerciseIndex]
-  const exerciseMessage = presentExercise(state, nextExercise)
-  const message = `⏭️ Skipped! Moving to next exercise:\n\n${exerciseMessage}`
-  sendTutorMessage(state, message)
-  sendProgressUpdate(state)
+    askForChoice()
+  })
 }
 
-// Main tutor process
-async function runTutor() {
-  console.log('[TUTOR] ' + '━'.repeat(60))
-  console.log('[TUTOR] 🎓 Prism Tutor')
-  console.log('[TUTOR] ' + '━'.repeat(60))
-  console.log()
+// Prompt user about saving state after lesson
+async function promptSaveState(): Promise<boolean> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  })
 
-  // Load course artifacts (diagnostics and lessons) from markdown FIRST
-  const courseId = 'redis-fundamentals'
-  console.log('[TUTOR] Loading course content...')
-  loadedArtifacts = await loadCourseArtifacts(courseId)
-  console.log(`[TUTOR] Loaded ${loadedArtifacts.diagnostics.length} diagnostics, ${loadedArtifacts.lessons.length} lessons`)
-  console.log()
+  return new Promise((resolve) => {
+    console.log()
+    console.log('╔' + '═'.repeat(68) + '╗')
+    console.log('║' + ' '.repeat(22) + 'SAVE YOUR PROGRESS?' + ' '.repeat(26) + '║')
+    console.log('╚' + '═'.repeat(68) + '╝')
+    console.log()
+    console.log('  [1] Save progress for later')
+    console.log('  [2] Clear all data')
+    console.log()
 
-  // Show lesson selection menu
-  const userGoal = await getUserLessonSelection(loadedArtifacts)
-  console.log()
-  console.log(`[TUTOR] Selected: "${userGoal}"`)
+    function askForChoice() {
+      rl.question('\x1b[36m➜\x1b[0m Your choice (1-2): ', (answer) => {
+        const choice = parseInt(answer.trim())
 
-  const picked = pickDiagnostic(userGoal, loadedArtifacts)
+        if (choice === 1) {
+          console.log()
+          console.log('\x1b[32mOK:\x1b[0m Progress saved!')
+          rl.close()
+          resolve(true)
+        } else if (choice === 2) {
+          console.log()
+          console.log('\x1b[32mOK:\x1b[0m Data cleared')
+          rl.close()
+          resolve(false)
+        } else {
+          console.log('\x1b[31mERROR:\x1b[0m Please enter 1 or 2')
+          console.log()
+          askForChoice()
+        }
+      })
+    }
 
-  const sessionId = `session-${Date.now()}`
-  const context: SessionContext = {
-    userId: 'demo-user',
-    courseId,
-    sessionId,
-    phase: 'tutoring',
-    startedAt: new Date().toISOString(),
-  }
+    askForChoice()
+  })
+}
 
-  const state: SessionState = {
-    context,
-    currentTopic: picked.def.topic,
-    mode: 'diagnostic',
-    diagnosticCommands: [],
-    currentExerciseIndex: 0,
-    diagnosticDef: picked.def,
-    exerciseStates: [],
-    hintLevel: 1
-  }
-
-  console.log()
-  console.log(`[TUTOR] Topic: ${picked.def.topic}`)
-  console.log('[TUTOR] Starting learning environment...')
-  console.log()
-
-  // Start learning environment via adapter
-  const env = await startLearningEnvironment({ port: 3000, sessionId })
-
+// Initialize lesson after course selection
+function initializeLesson(
+  state: SessionState,
+  env: LearningEnvironment,
+  picked: { def: DiagnosticDef; firstCommand: string },
+  stateManager: any
+) {
   // Store tutorBridge in state
   state.tutorBridge = env.tutorBridge
 
@@ -668,9 +745,20 @@ async function runTutor() {
     handleSkipRequest(state)
   })
 
-  // Auto-open browser
-  console.log('[TUTOR] Browser opened')
-  console.log(`[TUTOR] URL: ${env.url}`)
+  env.tutorBridge.onClearStateRequest(async () => {
+    console.log('[TUTOR] Clear state requested from UI')
+    try {
+      await env.tutorBridge.flushDatabase()
+      await stateManager.clearLessonState(state.lessonId)
+      sendTutorMessage(state, '[SUCCESS] Redis state cleared! Starting fresh.')
+      console.log('[TUTOR] State cleared successfully')
+    } catch (err) {
+      console.error('[TUTOR] Error clearing state:', err)
+      sendTutorMessage(state, '[ERROR] Error clearing state. Please try again.')
+    }
+  })
+
+  console.log('[TUTOR] Lesson initialized')
   console.log()
 
   // Send initial message to browser
@@ -696,8 +784,9 @@ async function runTutor() {
   console.log()
 
   // Subscribe to command stream
+  const sessionId = state.context.sessionId
   const stream = createCommandStream(sessionId)
-  await stream.subscribe(async (cmd) => {
+  stream.subscribe(async (cmd) => {
     try {
       console.log(`[TUTOR] Processing command: ${cmd.command}`)
       const feedback = await handleCommand(state, cmd)
@@ -708,7 +797,146 @@ async function runTutor() {
   })
 
   console.log('[TUTOR] Command stream connected')
-  console.log('[TUTOR] ✓ Tutor ready - watching your progress...')
+  console.log('[TUTOR] [READY] Tutor ready - watching your progress...')
+  console.log()
+}
+
+// Handle skip request from user
+function handleSkipRequest(state: SessionState) {
+  console.log('[TUTOR] Skip requested')
+
+  if (state.mode !== 'lesson' || !state.lessonPlan) {
+    sendTutorMessage(state, 'Nothing to skip during diagnostic phase.')
+    return
+  }
+
+  if (state.currentExerciseIndex >= state.lessonPlan.exercises.length) {
+    sendTutorMessage(state, 'You\'ve completed all exercises!')
+    return
+  }
+
+  // Mark current exercise as skipped
+  state.exerciseStates[state.currentExerciseIndex] = 'skipped'
+  state.currentQuestionData = undefined
+
+  // Move to next exercise
+  state.currentExerciseIndex++
+
+  // Mark next exercise as current if there is one
+  if (state.currentExerciseIndex < state.lessonPlan.exercises.length) {
+    state.exerciseStates[state.currentExerciseIndex] = 'current'
+    state.hintLevel = 1
+  }
+
+  if (state.currentExerciseIndex >= state.lessonPlan.exercises.length) {
+    const message = `You've reached the end of the lesson. You skipped some exercises - consider reviewing them later!`
+    sendTutorMessage(state, message)
+    sendProgressUpdate(state)
+    return
+  }
+
+  const nextExercise = state.lessonPlan.exercises[state.currentExerciseIndex]
+  const exerciseMessage = presentExercise(state, nextExercise)
+  const message = `[SKIPPED] Moving to next exercise:\n\n${exerciseMessage}`
+  sendTutorMessage(state, message)
+  sendProgressUpdate(state)
+}
+
+// Main tutor process
+async function runTutor() {
+  console.log('[TUTOR] ' + '━'.repeat(60))
+  console.log('[TUTOR] Prism Tutor')
+  console.log('[TUTOR] ' + '━'.repeat(60))
+  console.log()
+
+  // Load course artifacts (diagnostics and lessons) from markdown FIRST
+  const courseId = 'redis-fundamentals'
+  console.log('[TUTOR] Loading course content...')
+  loadedArtifacts = await loadCourseArtifacts(courseId)
+  console.log(`[TUTOR] Loaded ${loadedArtifacts.diagnostics.length} diagnostics, ${loadedArtifacts.lessons.length} lessons`)
+  console.log()
+
+  // Course selection will happen in the browser
+  let selectedCourse: string | null = null
+  let picked: ReturnType<typeof pickDiagnostic> | null = null
+
+  // Initialize state manager
+  const stateManager = getStateManager()
+  await stateManager.connect()
+
+  const sessionId = `session-${Date.now()}`
+
+  console.log('[TUTOR] Starting browser UI for course selection...')
+  console.log()
+
+  // Start learning environment with course selection UI
+  const env = await startLearningEnvironment({
+    port: 3000,
+    sessionId,
+    redisDb: 1,  // Temporary, will be updated after course selection
+    courseArtifacts: loadedArtifacts,
+    onCourseSelected: async (courseName: string) => {
+      selectedCourse = courseName
+      console.log()
+      console.log(`[TUTOR] Course selected: "${courseName}"`)
+      picked = pickDiagnostic(courseName, loadedArtifacts)
+
+      // Determine stable lesson identifier
+      const matchedLesson = picked.def.lessonTopic
+        ? findLessonForDiagnostic(loadedArtifacts, picked.def)
+        : null
+      const lessonId = matchedLesson?.lessonId || picked.def.lessonTopic || picked.def.topic
+      const lessonTopic = picked.def.lessonTopic || picked.def.topic
+
+      // Check for saved state and get database using stable ID
+      const hasState = await stateManager.checkLessonHasState(lessonId)
+      const redisDb = await stateManager.getDatabaseForLesson(lessonId)
+
+      console.log()
+      console.log(`[TUTOR] Topic: ${lessonTopic}`)
+      console.log(`[TUTOR] Using Redis database: ${redisDb}`)
+
+      // Handle state policy
+      const stateChoice = await promptStateManagement(lessonTopic, hasState)
+
+      if (stateChoice === 'clear') {
+        console.log('[TUTOR] Clearing Redis database...')
+        await stateManager.flushDatabase(redisDb)
+        await stateManager.clearLessonState(lessonId)
+        console.log('[TUTOR] Database cleared')
+      }
+
+      const context: SessionContext = {
+        userId: 'demo-user',
+        courseId,
+        sessionId,
+        phase: 'tutoring',
+        startedAt: new Date().toISOString(),
+      }
+
+      const state: SessionState = {
+        context,
+        currentTopic: picked.def.topic,
+        mode: 'diagnostic',
+        diagnosticCommands: [],
+        currentExerciseIndex: 0,
+        diagnosticDef: picked.def,
+        exerciseStates: [],
+        hintLevel: 1,
+        redisDb,
+        lessonId
+      }
+
+      // Initialize the lesson flow after course selection
+      initializeLesson(state, env, picked, stateManager)
+    }
+  })
+
+  // Browser opened with course selection UI
+  console.log('[TUTOR] Browser opened')
+  console.log(`[TUTOR] URL: ${env.url}`)
+  console.log()
+  console.log('[TUTOR] Waiting for course selection in browser...')
   console.log()
 }
 

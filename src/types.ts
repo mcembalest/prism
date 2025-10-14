@@ -27,12 +27,9 @@ export interface CourseContext {
 }
 
 export type ExerciseType =
-  | 'command'              // Execute a Redis command
-  | 'conceptual-question'  // Answer a question about concepts
-  | 'prediction'           // Predict what a command will output
-  | 'explanation'          // Explain what a command does or why
-  | 'worked-example'       // Watch a demonstration, then answer questions
-  | 'review'              // Review previously learned material
+  | 'command'              // Execute a Redis command in the CLI
+  | 'worked-example'       // Demonstrate a concept by executing commands
+  | 'teach'                // Present teaching content, then guide to try commands
 
 export interface BaseExercise {
   type: ExerciseType
@@ -43,68 +40,90 @@ export interface BaseExercise {
 
 export interface CommandExercise extends BaseExercise {
   type: 'command'
-  command: string           // The exercise command (e.g., "HSET user:1 name Alice")
+  prompt: string            // What to tell the student (e.g., "Now try setting a name field")
+  command: string           // The command they should execute
   expectedPattern?: string  // Regex pattern for expected output
+  teachingPoint?: string    // Concept explanation after they complete it
 }
 
-export interface ConceptualQuestionExercise extends BaseExercise {
-  type: 'conceptual-question'
-  question: string          // The question to ask
-  options: string[]         // Multiple choice options
-  correctIndex: number      // Index of correct option
-  explanation: string       // Why this is the correct answer
-}
-
-export interface PredictionExercise extends BaseExercise {
-  type: 'prediction'
-  command: string           // Command they'll predict output for
-  question: string          // "What will this command return?"
-  options: string[]         // Possible outputs
-  correctIndex: number      // Index of correct output
-  explanation: string       // Explanation of the result
-}
-
-export interface ExplanationExercise extends BaseExercise {
-  type: 'explanation'
-  command: string           // Command to explain
-  question: string          // "Why does this work?" or "What does this do?"
-  acceptedKeywords: string[] // Keywords that should appear in answer
-  sampleAnswer: string      // Example good answer to show after
+export interface TeachExercise extends BaseExercise {
+  type: 'teach'
+  content: string           // Teaching content to present
+  guidedCommands: Array<{   // Series of commands to guide them through
+    prompt: string          // What to tell them to try
+    command: string         // Expected command
+    teachingPoint: string   // What to explain after they do it
+  }>
 }
 
 export interface WorkedExampleExercise extends BaseExercise {
   type: 'worked-example'
   title: string             // Title of the example
+  narration: string         // What concept this demonstrates
   steps: Array<{            // Step-by-step demonstration
-    command: string
-    narration: string       // Explanation of this step
-    output?: string         // Expected output to show
+    command: string         // Command to execute in CLI
+    explanation: string     // What this step shows
+    expectedOutput?: string // What to expect
   }>
-  followUpQuestion: string  // Question to check understanding
-  options: string[]         // Multiple choice options
-  correctIndex: number      // Index of correct answer
-}
-
-export interface ReviewExercise extends BaseExercise {
-  type: 'review'
-  reviewTopic: string       // What we're reviewing
-  question: string          // Question about prior material
-  options: string[]         // Multiple choice
-  correctIndex: number      // Index of correct answer
-  priorLesson?: string      // Which lesson this reviews
+  followUpCommand?: {       // Optional command for them to try
+    prompt: string
+    command: string
+    teachingPoint: string
+  }
 }
 
 export type Exercise =
   | CommandExercise
-  | ConceptualQuestionExercise
-  | PredictionExercise
-  | ExplanationExercise
+  | TeachExercise
   | WorkedExampleExercise
-  | ReviewExercise
+
+export type StatePolicy = 'always_clear' | 'user_choice' | 'persist'
 
 export interface LessonPlan {
+  lessonId?: string        // Stable identifier (if not provided, hash of topic will be used)
   topic: string
   level: 'beginner' | 'intermediate' | 'advanced'
   exercises: Exercise[]
   summary: string          // What they'll learn in this lesson
+  statePolicy?: StatePolicy // How to handle Redis state (default: 'user_choice')
+}
+
+// ============================================================================
+// NEW: Skill Graph Types (generic, domain-agnostic)
+// ============================================================================
+
+export interface ValidationAction {
+  actionPattern: string    // Regex pattern matching the action (e.g., "SET \\w+ .+")
+  expectedOutput: string   // Natural language or pattern describing expected result
+}
+
+export interface Skill {
+  id: string              // Stable identifier (e.g., "redis-set-string")
+  name: string            // Human-readable name
+  prerequisites: string[] // Array of skill IDs that must be mastered first
+  validationActions: ValidationAction[] // Actions that demonstrate mastery
+}
+
+export interface SkillGraph {
+  skills: Skill[]
+}
+
+export interface Activity {
+  id: string
+  name: string
+  targetSkills: string[]  // Skills this activity teaches/validates
+  exercises: Exercise[]   // Reuse existing exercise types
+  level: 'beginner' | 'intermediate' | 'advanced'
+  summary: string
+  diagnostic?: {          // Optional: calibration commands before starting
+    keywords: string[]    // Keywords to match this activity (for search)
+    commands: string[]    // Commands to assess current skill level
+  }
+}
+
+export interface CourseManifest {
+  courseId: string
+  name: string
+  description: string
+  entrySkills: string[]   // Skill IDs where students typically start
 }

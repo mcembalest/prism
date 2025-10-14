@@ -1,0 +1,8 @@
+{
+  "courseId": "redis-fundamentals",
+  "name": "Redis Fundamentals",
+  "description": "Master the fundamentals of Redis through hands-on practice with strings, hashes, lists, sets, and more. Learn by doing in a real Redis environment.",
+  "entrySkills": [
+    "redis-string-basic"
+  ]
+}

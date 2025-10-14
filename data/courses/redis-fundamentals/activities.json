@@ -1,0 +1,152 @@
+{
+  "activities": [
+    {
+      "id": "redis-hashes-basics",
+      "name": "Redis Hashes - Basics",
+      "targetSkills": ["redis-hash-create", "redis-hash-retrieve", "redis-hash-getall", "redis-hash-increment"],
+      "level": "beginner",
+      "summary": "Learn to store and retrieve fields in Redis hashes through hands-on practice",
+      "diagnostic": {
+        "keywords": ["hash", "hashes", "field", "object", "profile"],
+        "commands": [
+          "HSET user:1 name Alice",
+          "HGET user:1 name"
+        ]
+      },
+      "exercises": [
+        {
+          "type": "worked-example",
+          "title": "Storing User Data",
+          "narration": "Let's see how to build up a user profile using hashes. Watch how HSET returns the number of NEW fields created:",
+          "steps": [
+            {
+              "command": "HSET user:1 name \"Alice\"",
+              "explanation": "First, we create a hash and set the 'name' field. The key is 'user:1' and we're setting one field.",
+              "expectedOutput": "(integer) 1"
+            },
+            {
+              "command": "HSET user:1 email \"alice@example.com\" age \"30\"",
+              "explanation": "Now we add more fields to the same hash. HSET can set multiple fields at once. Notice it returns (integer) 2 because we added TWO NEW fields.",
+              "expectedOutput": "(integer) 2"
+            },
+            {
+              "command": "HGETALL user:1",
+              "explanation": "Finally, we retrieve all fields and values from the hash. This shows us the complete object.",
+              "expectedOutput": "1) \"name\"\\n2) \"Alice\"\\n3) \"email\"\\n4) \"alice@example.com\"\\n5) \"age\"\\n6) \"30\""
+            }
+          ],
+          "followUpCommand": {
+            "prompt": "Now you try creating a new user with an email field",
+            "command": "HSET user:2 email alice@example.com",
+            "teachingPoint": "Great! HSET returned (integer) 1 because this was a NEW field. If you run it again, it will return 0 (updating existing)."
+          },
+          "feedback": "You're getting the hang of hashes!"
+        },
+        {
+          "type": "command",
+          "prompt": "Let's retrieve that email you just set",
+          "command": "HGET user:2 email",
+          "feedback": "Perfect! HGET retrieves a single field from the hash.",
+          "teachingPoint": "Use HGET when you only need one field, not the entire hash."
+        },
+        {
+          "type": "command",
+          "prompt": "Now see all fields in user:2",
+          "command": "HGETALL user:2",
+          "feedback": "Excellent! You can see all fields and values at once."
+        },
+        {
+          "type": "command",
+          "prompt": "Create a product with multiple fields at once: name='Laptop' and price=999",
+          "command": "HSET product:1 name \"Laptop\" price 999",
+          "feedback": "Nice! You can set multiple fields in one command.",
+          "teachingPoint": "Setting multiple fields at once is more efficient than multiple HSETs."
+        },
+        {
+          "type": "teach",
+          "content": "Hashes have special commands for numeric fields. HINCRBY lets you increment a number stored in a hash field, just like INCR works for string keys.",
+          "guidedCommands": [
+            {
+              "prompt": "First, check the current price",
+              "command": "HGET product:1 price",
+              "teachingPoint": "The price is currently 999. Now let's increase it."
+            },
+            {
+              "prompt": "Increase the price by 50 using HINCRBY",
+              "command": "HINCRBY product:1 price 50",
+              "teachingPoint": "Perfect! HINCRBY returned 1049 - that's the NEW value after incrementing. It added 50 to 999."
+            },
+            {
+              "prompt": "Verify the new price",
+              "command": "HGET product:1 price",
+              "teachingPoint": "Confirmed! The price is now 1049. HINCRBY is atomic - perfect for counters, inventory, scores, etc."
+            }
+          ],
+          "feedback": "You've mastered hash increments!"
+        }
+      ]
+    },
+    {
+      "id": "redis-lists-basics",
+      "name": "Redis Lists - Basics",
+      "targetSkills": ["redis-list-push", "redis-list-range", "redis-list-pop", "redis-list-queue"],
+      "level": "beginner",
+      "summary": "Master Redis lists - ordered collections perfect for queues and feeds",
+      "diagnostic": {
+        "keywords": ["list", "lists", "queue", "tasks", "lpush", "rpush"],
+        "commands": [
+          "LPUSH queue \"task1\"",
+          "LRANGE queue 0 -1"
+        ]
+      },
+      "exercises": [
+        {
+          "type": "teach",
+          "content": "Lists in Redis are ordered collections. The key concept: LEFT vs RIGHT. Think of a list like a line of people - you can add to the LEFT (front) with LPUSH or RIGHT (back) with RPUSH.",
+          "guidedCommands": [
+            {
+              "prompt": "Add a task to the LEFT (front) of the queue",
+              "command": "LPUSH queue \"task2\"",
+              "teachingPoint": "Great! LPUSH adds to the front of the list."
+            },
+            {
+              "prompt": "Add another task to the RIGHT (back) of the queue",
+              "command": "RPUSH queue \"task3\"",
+              "teachingPoint": "Perfect! RPUSH adds to the back. The queue now has task1 in the middle (from earlier), task2 at front, task3 at back."
+            },
+            {
+              "prompt": "View all items in order",
+              "command": "LRANGE queue 0 -1",
+              "teachingPoint": "See the order? task2 (pushed left), task1 (was there), task3 (pushed right). Order matters in lists!"
+            }
+          ],
+          "feedback": "You understand list ordering!"
+        },
+        {
+          "type": "command",
+          "prompt": "Remove and return the leftmost item",
+          "command": "LPOP queue",
+          "feedback": "Excellent! You removed an item from the left.",
+          "teachingPoint": "LPOP + RPUSH creates a FIFO queue (first in, first out). RPOP + RPUSH creates a LIFO stack (last in, first out)."
+        },
+        {
+          "type": "teach",
+          "content": "Lists are perfect for task queues. For a proper FIFO queue: add tasks with RPUSH (to the end), process with LPOP (from the beginning).",
+          "guidedCommands": [
+            {
+              "prompt": "Add a task to process later",
+              "command": "RPUSH queue \"process-payment\"",
+              "teachingPoint": "Added to the back of the queue. This is how job queues work!"
+            },
+            {
+              "prompt": "Add another task",
+              "command": "RPUSH queue \"send-email\"",
+              "teachingPoint": "Another job queued. Tasks will be processed in the order they were added."
+            }
+          ],
+          "feedback": "You've built a task queue!"
+        }
+      ]
+    }
+  ]
+}

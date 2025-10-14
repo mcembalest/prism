@@ -30,7 +30,10 @@ export interface ServerOptions {
   port?: number
   redisHost?: string
   redisPort?: number
+  redisDb?: number  // Redis database number (0-15)
   sessionId: string
+  courseArtifacts?: any  // Course data for selection UI
+  onCourseSelected?: (courseName: string) => void  // Callback when course is selected
 }
 
 export interface TutorBridge {
@@ -38,6 +41,8 @@ export interface TutorBridge {
   sendProgress: (progress: ProgressUpdate) => void
   onHintRequest: (handler: () => void) => void
   onSkipRequest: (handler: () => void) => void
+  onClearStateRequest: (handler: () => void) => void
+  flushDatabase: () => Promise<void>
 }
 
 export interface ProgressUpdate {
@@ -52,29 +57,334 @@ export async function startServer(options: ServerOptions) {
   const port = options.port || 3000
   const redisHost = options.redisHost || '127.0.0.1'
   const redisPort = options.redisPort || 6379
+  const redisDb = options.redisDb ?? 1  // Default to database 1 (0 is for metadata)
   const sessionId = options.sessionId
+  const courseArtifacts = options.courseArtifacts
+  const onCourseSelected = options.onCourseSelected
 
   // Create Redis pub/sub client
   const redisPubClient = createClient({
-    socket: { host: redisHost, port: redisPort }
+    socket: { host: redisHost, port: redisPort },
+    database: redisDb
   })
   await redisPubClient.connect()
 
   // Express app
   const app = express()
+  app.use(express.json())  // Add JSON body parsing for course selection
   const server = createServer(app)
   const wss = new WebSocketServer({ server })
 
   // Track WebSocket connection for tutor bridge
   let browserWs: any = null
   const messageQueue: any[] = []
+  let courseSelected = false  // Track if course has been selected
 
   // Handlers for tutor actions
   let hintRequestHandler: (() => void) | null = null
   let skipRequestHandler: (() => void) | null = null
+  let clearStateRequestHandler: (() => void) | null = null
+
+  // Course selection endpoint
+  app.post('/select-course', (req, res) => {
+    const { courseName } = req.body
+    console.log('[SERVER] Course selected:', courseName)
+    courseSelected = true
+
+    // Notify tutor of course selection
+    if (onCourseSelected) {
+      onCourseSelected(courseName)
+    }
+
+    res.json({ success: true })
+  })
 
   // Serve static HTML
   app.get('/', (req, res) => {
+    // Show course selection if we have artifacts and no course selected yet
+    if (courseArtifacts && !courseSelected) {
+      const activities = courseArtifacts.activities || courseArtifacts.lessons || []
+      const activitiesHTML = activities.map((activity: any, index: number) => {
+        const level = activity.level || 'beginner'
+        const levelText = level.charAt(0).toUpperCase() + level.slice(1)
+        const name = activity.name || activity.topic || 'Lesson'
+        const summary = activity.summary || ''
+
+        return `
+          <div class="course-card" onclick="selectCourse('${name}')">
+            <div class="course-header">
+              <span class="level-badge level-${level}">${levelText}</span>
+              <h3 class="course-title">${name}</h3>
+            </div>
+            <p class="course-summary">${summary}</p>
+          </div>
+        `
+      }).join('')
+
+      res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Prism - Select a Course</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      max-width: 800px;
+      width: 90%;
+      padding: 40px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .header h1 {
+      color: white;
+      font-size: 42px;
+      margin: 0 0 10px 0;
+      font-weight: 700;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .header p {
+      color: rgba(255,255,255,0.9);
+      font-size: 18px;
+      margin: 0;
+    }
+    .header .subtitle {
+      color: rgba(255,255,255,0.8);
+      font-size: 16px;
+      margin-top: 8px;
+    }
+    .courses-grid {
+      display: grid;
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    .course-card {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .course-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 12px rgba(0,0,0,0.15);
+    }
+    .course-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .level-badge {
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .level-beginner {
+      background: #d4edda;
+      color: #155724;
+    }
+    .level-intermediate {
+      background: #fff3cd;
+      color: #856404;
+    }
+    .level-advanced {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .course-title {
+      margin: 0;
+      font-size: 20px;
+      color: #2d3748;
+      font-weight: 600;
+    }
+    .course-summary {
+      margin: 0;
+      color: #718096;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .custom-course-card {
+      background: rgba(255,255,255,0.95);
+      border-radius: 12px;
+      padding: 24px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      border: 2px dashed #cbd5e0;
+    }
+    .custom-course-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 12px rgba(0,0,0,0.15);
+      border-color: #667eea;
+    }
+    .custom-icon {
+      font-size: 14px;
+      font-weight: 600;
+      color: #667eea;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    #custom-input-container {
+      display: none;
+      margin-top: 20px;
+    }
+    #custom-input-container.show {
+      display: block;
+    }
+    #custom-input {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: 16px;
+      border: 2px solid #cbd5e0;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-family: inherit;
+    }
+    #custom-input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    .button-group {
+      display: flex;
+      gap: 12px;
+    }
+    .btn {
+      flex: 1;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #5568d3;
+    }
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #2d3748;
+    }
+    .btn-secondary:hover {
+      background: #cbd5e0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Prism</h1>
+      <p>Choose a course to begin</p>
+    </div>
+
+    <div class="courses-grid">
+      ${activitiesHTML}
+
+      <div class="custom-course-card" onclick="showCustomInput()">
+        <div class="custom-icon">Custom</div>
+        <h3 class="course-title">Create your own course</h3>
+        <p class="course-summary">Describe what you'd like to learn and we'll create a custom lesson</p>
+      </div>
+    </div>
+
+    <div id="custom-input-container">
+      <input
+        type="text"
+        id="custom-input"
+        placeholder="What would you like to learn?"
+        autocomplete="off"
+      />
+      <div class="button-group">
+        <button class="btn btn-primary" onclick="submitCustomCourse()">Start Learning</button>
+        <button class="btn btn-secondary" onclick="hideCustomInput()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function showCustomInput() {
+      document.getElementById('custom-input-container').classList.add('show');
+      document.getElementById('custom-input').focus();
+    }
+
+    function hideCustomInput() {
+      document.getElementById('custom-input-container').classList.remove('show');
+      document.getElementById('custom-input').value = '';
+    }
+
+    async function selectCourse(courseName) {
+      console.log('Selected course:', courseName);
+
+      try {
+        const response = await fetch('/select-course', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ courseName })
+        });
+
+        if (response.ok) {
+          // Reload page to show lesson environment
+          window.location.reload();
+        }
+      } catch (err) {
+        console.error('Error selecting course:', err);
+      }
+    }
+
+    async function submitCustomCourse() {
+      const input = document.getElementById('custom-input');
+      const courseName = input.value.trim();
+
+      if (!courseName) {
+        input.focus();
+        return;
+      }
+
+      await selectCourse(courseName);
+    }
+
+    // Allow Enter key to submit custom course
+    document.getElementById('custom-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitCustomCourse();
+      }
+    });
+  </script>
+</body>
+</html>
+      `)
+      return
+    }
+
+    // Otherwise, show lesson environment
     res.send(`
 <!DOCTYPE html>
 <html>
@@ -108,46 +418,87 @@ export async function startServer(options: ServerOptions) {
     #main-container {
       display: flex;
       height: calc(100vh - 50px);
+      position: relative;
     }
     #terminal-panel {
-      flex: 1;
+      width: calc(100% - 404px);
       padding: 20px;
       background: #1e1e1e;
+      min-width: 300px;
     }
     #terminal {
       width: 100%;
       height: 100%;
     }
+    #divider {
+      width: 4px;
+      background: #3e3e42;
+      cursor: col-resize;
+      transition: background 0.2s ease;
+      position: relative;
+      flex-shrink: 0;
+    }
+    #divider:hover {
+      background: #007acc;
+    }
     #right-panel {
       width: 400px;
+      min-width: 350px;
       background: #252526;
-      border-left: 1px solid #3e3e42;
       display: flex;
       flex-direction: column;
+      position: relative;
     }
-    #progress-section {
-      padding: 20px;
-      border-bottom: 1px solid #3e3e42;
+    #progress-mini {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 15px;
+      background: #2d2d2d;
+      border-radius: 8px;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
-    #progress-section h2 {
-      margin: 0 0 15px 0;
-      font-size: 14px;
-      color: #cccccc;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+    #progress-full {
+      position: absolute;
+      top: 85px;
+      right: 15px;
+      width: 280px;
+      background: #2d2d2d;
+      border: 1px solid #3e3e42;
+      border-radius: 8px;
+      padding: 15px;
+      z-index: 99;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      display: none;
+    }
+    #progress-mini:hover + #progress-full,
+    #progress-full:hover {
+      display: block;
     }
     .progress-item {
       margin-bottom: 12px;
     }
+    .progress-full-item {
+      margin-bottom: 12px;
+    }
     .progress-label {
-      font-size: 13px;
+      font-size: 12px;
       color: #999;
-      margin-bottom: 5px;
+      margin-bottom: 4px;
     }
     .progress-value {
-      font-size: 14px;
+      font-size: 13px;
       color: #e0e0e0;
       font-weight: 500;
+    }
+    .progress-circles-mini {
+      display: flex;
+      gap: 6px;
+      align-items: center;
     }
     .progress-circles {
       display: flex;
@@ -172,16 +523,11 @@ export async function startServer(options: ServerOptions) {
     .progress-circle.skipped {
       background: #ff8c42;
     }
-    .radial-progress-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 15px;
-    }
     .radial-progress {
       position: relative;
-      width: 80px;
-      height: 80px;
+      width: 50px;
+      height: 50px;
+      flex-shrink: 0;
     }
     .radial-progress svg {
       transform: rotate(-90deg);
@@ -189,12 +535,12 @@ export async function startServer(options: ServerOptions) {
     .radial-progress-bg {
       fill: none;
       stroke: #3e3e42;
-      stroke-width: 8;
+      stroke-width: 6;
     }
     .radial-progress-fill {
       fill: none;
       stroke: #ff8c42;
-      stroke-width: 8;
+      stroke-width: 6;
       stroke-linecap: round;
       transition: stroke-dashoffset 0.5s ease, stroke 0.5s ease;
     }
@@ -203,7 +549,7 @@ export async function startServer(options: ServerOptions) {
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 18px;
+      font-size: 12px;
       font-weight: 600;
       color: #e0e0e0;
     }
@@ -247,6 +593,7 @@ export async function startServer(options: ServerOptions) {
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      height: 100%;
     }
     #chat-header {
       padding: 15px 20px;
@@ -408,39 +755,38 @@ export async function startServer(options: ServerOptions) {
 </head>
 <body>
   <div id="header">
-    <h1>🎓 Prism - Redis Learning Environment</h1>
+    <h1>Prism - Redis Learning Environment</h1>
   </div>
   <div id="main-container">
     <div id="terminal-panel">
       <div id="terminal"></div>
     </div>
+    <div id="divider"></div>
     <div id="right-panel">
-      <div id="progress-section">
-        <h2>Progress</h2>
-        <div class="radial-progress-container">
-          <div class="radial-progress">
-            <svg width="80" height="80">
-              <circle class="radial-progress-bg" cx="40" cy="40" r="32"></circle>
-              <circle class="radial-progress-fill" id="radial-progress-fill" cx="40" cy="40" r="32"
-                      stroke-dasharray="201" stroke-dashoffset="201"></circle>
-            </svg>
-            <div class="radial-progress-text" id="radial-progress-text">0/0</div>
-          </div>
+      <div id="progress-mini">
+        <div class="radial-progress">
+          <svg width="50" height="50">
+            <circle class="radial-progress-bg" cx="25" cy="25" r="20"></circle>
+            <circle class="radial-progress-fill" id="radial-progress-fill" cx="25" cy="25" r="20"
+                    stroke-dasharray="126" stroke-dashoffset="126"></circle>
+          </svg>
+          <div class="radial-progress-text" id="radial-progress-text">0/0</div>
         </div>
-        <div class="progress-item">
+        <div class="progress-circles-mini" id="progress-circles-mini">
+          <!-- Circles will be generated dynamically -->
+        </div>
+      </div>
+      <div id="progress-full">
+        <div class="progress-full-item">
           <div class="progress-label">Current Topic</div>
           <div class="progress-value" id="current-topic">Starting...</div>
         </div>
-        <div class="progress-item">
-          <div class="progress-label">Lesson Progress</div>
-          <div class="progress-value">
-            <span id="exercise-count">0 / 0</span> exercises completed
-          </div>
-          <div class="progress-circles" id="progress-circles">
+        <div class="progress-full-item">
+          <div class="progress-circles" id="progress-circles-full">
             <!-- Circles will be generated dynamically -->
           </div>
         </div>
-        <div class="progress-item">
+        <div class="progress-full-item">
           <div class="progress-label">Current Exercise</div>
           <div class="progress-value" id="current-exercise">Waiting for lesson...</div>
         </div>
@@ -456,7 +802,7 @@ export async function startServer(options: ServerOptions) {
         <div id="chat-messages">
           <div class="message system">
             <div class="message-header">
-              <span class="message-icon">🎓</span>
+              <span class="message-icon">[TUTOR]</span>
               <span class="message-sender">Prism Tutor</span>
             </div>
             <div class="message-content">Welcome! Your tutor will guide you through the lesson.</div>
@@ -520,7 +866,7 @@ export async function startServer(options: ServerOptions) {
     // Enhanced message parsing and rendering
     function parseMessage(content) {
       // Check if content contains a multiple choice question
-      const questionMatch = content.match(/^(📝.*?)\\n\\n(.+?)\\n\\n((\\d+\\..+?\\n)+)/s);
+      const questionMatch = content.match(/^(\[(?:QUESTION|REVIEW).*?\])\\n\\n(.+?)\\n\\n((\\d+\\..+?\\n)+)/s);
       if (questionMatch) {
         const prefix = questionMatch[1];
         const question = questionMatch[2];
@@ -551,7 +897,7 @@ export async function startServer(options: ServerOptions) {
       }
 
       // Check if content contains a prediction question (similar format)
-      const predictionMatch = content.match(/^(🔮.*?)\\n\\n(.+?)\\n\\n(.+?)\\n\\n((\\d+\\..+?\\n)+)/s);
+      const predictionMatch = content.match(/^(\[PREDICTION\])\\n\\n(.+?)\\n\\n(.+?)\\n\\n((\\d+\\..+?\\n)+)/s);
       if (predictionMatch) {
         const prefix = predictionMatch[1];
         const command = predictionMatch[2];
@@ -595,9 +941,9 @@ export async function startServer(options: ServerOptions) {
       chatInput.value = answer;
       chatInput.focus();
 
-      // Auto-send the answer
+      // Auto-send the answer as chat message (not to terminal)
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(answer + '\\r');
+        ws.send(JSON.stringify({ type: 'chat-message', message: answer }));
         chatInput.value = '';
       }
     }
@@ -607,7 +953,7 @@ export async function startServer(options: ServerOptions) {
       const messageDiv = document.createElement('div');
       messageDiv.className = 'message ' + (type === 'success' ? 'success' : '');
 
-      const icon = type === 'success' ? '✓' : '🎓';
+      const icon = type === 'success' ? '[OK]' : '[TUTOR]';
 
       const parsedContent = parseMessage(content);
 
@@ -633,10 +979,8 @@ export async function startServer(options: ServerOptions) {
         const total = data.totalExercises;
         const exerciseStates = data.exerciseStates || [];
 
-        document.getElementById('exercise-count').textContent = \`\${completed} / \${total}\`;
-
-        // Update radial progress
-        const radius = 32;
+        // Update radial progress (radius = 20 for mini)
+        const radius = 20;
         const circumference = 2 * Math.PI * radius;
         const percentage = total > 0 ? completed / total : 0;
         const offset = circumference - (percentage * circumference);
@@ -657,33 +1001,36 @@ export async function startServer(options: ServerOptions) {
 
         radialFill.style.stroke = \`rgb(\${r}, \${g}, \${b})\`;
 
-        // Update circles
-        const circlesContainer = document.getElementById('progress-circles');
+        // Update circles in both mini and full views
+        const circlesMini = document.getElementById('progress-circles-mini');
+        const circlesFull = document.getElementById('progress-circles-full');
 
-        // Create circles if they don't exist or if the count changed
-        if (circlesContainer.children.length !== total) {
-          circlesContainer.innerHTML = '';
-          for (let i = 0; i < total; i++) {
-            const circle = document.createElement('div');
-            circle.className = 'progress-circle';
-            circlesContainer.appendChild(circle);
+        [circlesMini, circlesFull].forEach(container => {
+          // Create circles if they don't exist or if the count changed
+          if (container.children.length !== total) {
+            container.innerHTML = '';
+            for (let i = 0; i < total; i++) {
+              const circle = document.createElement('div');
+              circle.className = 'progress-circle';
+              container.appendChild(circle);
+            }
           }
-        }
 
-        // Update circle states based on exerciseStates array
-        const circles = circlesContainer.children;
-        for (let i = 0; i < circles.length; i++) {
-          circles[i].className = 'progress-circle';
+          // Update circle states based on exerciseStates array
+          const circles = container.children;
+          for (let i = 0; i < circles.length; i++) {
+            circles[i].className = 'progress-circle';
 
-          if (exerciseStates[i] === 'completed') {
-            circles[i].classList.add('completed');
-          } else if (exerciseStates[i] === 'current') {
-            circles[i].classList.add('current');
-          } else if (exerciseStates[i] === 'skipped') {
-            circles[i].classList.add('skipped');
+            if (exerciseStates[i] === 'completed') {
+              circles[i].classList.add('completed');
+            } else if (exerciseStates[i] === 'current') {
+              circles[i].classList.add('current');
+            } else if (exerciseStates[i] === 'skipped') {
+              circles[i].classList.add('skipped');
+            }
+            // else: untouched (grey - default)
           }
-          // else: untouched (grey - default)
-        }
+        });
       }
       if (data.currentExercise) {
         document.getElementById('current-exercise').textContent = data.currentExercise;
@@ -728,6 +1075,48 @@ export async function startServer(options: ServerOptions) {
       sendResize();
     });
 
+    // Divider drag functionality
+    const divider = document.getElementById('divider');
+    const terminalPanel = document.getElementById('terminal-panel');
+    const rightPanel = document.getElementById('right-panel');
+    const mainContainer = document.getElementById('main-container');
+    let isDragging = false;
+
+    divider.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+
+      const containerRect = mainContainer.getBoundingClientRect();
+      const newTerminalWidth = e.clientX - containerRect.left;
+      const dividerWidth = 4;
+      const newRightWidth = containerRect.width - newTerminalWidth - dividerWidth;
+
+      // Enforce minimum widths
+      const minTerminalWidth = 300;
+      const minRightWidth = 350;
+
+      if (newTerminalWidth >= minTerminalWidth && newRightWidth >= minRightWidth) {
+        terminalPanel.style.width = newTerminalWidth + 'px';
+        rightPanel.style.width = newRightWidth + 'px';
+
+        // Refit terminal after resize
+        setTimeout(() => {
+          fitAddon.fit();
+          sendResize();
+        }, 0);
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+      }
+    });
+
     // Button handlers
     document.getElementById('hint-button').addEventListener('click', () => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -749,9 +1138,9 @@ export async function startServer(options: ServerOptions) {
       const message = chatInput.value.trim();
       if (!message) return;
 
-      // Send message to terminal (which handles both answers and questions)
+      // Send message as chat message (not to terminal)
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(message + '\\r');
+        ws.send(JSON.stringify({ type: 'chat-message', message: message }));
       }
 
       // Clear input
@@ -792,7 +1181,8 @@ export async function startServer(options: ServerOptions) {
     // Spawn redis-cli with reasonable initial size (will be resized by client)
     const ptyProcess = pty.spawn('redis-cli', [
       '-h', redisHost,
-      '-p', redisPort.toString()
+      '-p', redisPort.toString(),
+      '-n', redisDb.toString()  // Select Redis database
     ], {
       name: 'xterm-256color',
       cols: 80,
@@ -804,6 +1194,14 @@ export async function startServer(options: ServerOptions) {
     let buffer = ''
     let lastCommandLine = ''
 
+    // Build prompt pattern based on database number
+    // Database 0: "127.0.0.1:6379>"
+    // Database N: "127.0.0.1:6379[N]>"
+    const promptPattern = redisDb === 0
+      ? '127.0.0.1:6379>'
+      : `127.0.0.1:6379[${redisDb}]>`
+    const promptRegex = new RegExp(promptPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+
     // Forward pty output to WebSocket
     ptyProcess.onData((data) => {
       ws.send(data)
@@ -812,17 +1210,17 @@ export async function startServer(options: ServerOptions) {
       buffer += data
 
       // Detect when user presses Enter (command submitted)
-      if (data.includes('\r\n') && !data.includes('127.0.0.1:6379>')) {
+      if (data.includes('\r\n') && !promptRegex.test(data)) {
         // User just submitted a command, extract it from buffer
         const lines = buffer.split('\r\n')
         for (const line of lines) {
           // Find line with prompt and command (without the output)
-          if (line.includes('127.0.0.1:6379>')) {
+          if (promptRegex.test(line)) {
             // Strip ALL ANSI escape codes (not just color codes)
             const stripped = line.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\r/g, '')
-            const lastPromptIndex = stripped.lastIndexOf('127.0.0.1:6379>')
+            const lastPromptIndex = stripped.lastIndexOf(promptPattern)
             if (lastPromptIndex !== -1) {
-              const cmd = stripped.substring(lastPromptIndex + 15).trim()
+              const cmd = stripped.substring(lastPromptIndex + promptPattern.length).trim()
               if (cmd && cmd !== lastCommandLine) {
                 lastCommandLine = cmd
                 console.log('[SERVER] Captured command:', cmd)
@@ -835,7 +1233,7 @@ export async function startServer(options: ServerOptions) {
       }
 
       // Detect when we're back at prompt after output (command completed)
-      if (lastCommandLine && data.includes('127.0.0.1:6379>')) {
+      if (lastCommandLine && promptRegex.test(data)) {
         console.log('[SERVER] Command completed, processing...')
         processBuffer(buffer, lastCommandLine, redisPubClient, sessionId)
         lastCommandLine = ''
@@ -847,7 +1245,7 @@ export async function startServer(options: ServerOptions) {
     ws.on('message', (data) => {
       const message = data.toString()
 
-      // Check if this is a JSON message (resize, hint, skip, etc.)
+      // Check if this is a JSON message (resize, hint, skip, chat, etc.)
       try {
         const parsed = JSON.parse(message)
         if (parsed.type === 'resize' && parsed.cols && parsed.rows) {
@@ -876,6 +1274,30 @@ export async function startServer(options: ServerOptions) {
           }
           return
         }
+        if (parsed.type === 'clear-state') {
+          console.log('[SERVER] Clear state requested')
+          if (clearStateRequestHandler) {
+            clearStateRequestHandler()
+          }
+          return
+        }
+        if (parsed.type === 'chat-message') {
+          // Handle chat message - publish directly to Redis without sending to terminal
+          console.log('[SERVER] Chat message received:', parsed.message)
+          const cmdData: RedisCommand = {
+            command: parsed.message,
+            terminalOutput: '',
+            csvOutput: '',
+            timestamp: new Date().toISOString(),
+            sessionId
+          }
+
+          const channel = process.env.PRISM_COMMAND_CHANNEL || 'prism:commands'
+          redisPubClient.publish(channel, JSON.stringify(cmdData))
+            .then(() => console.log('[SERVER] Published chat message to tutor'))
+            .catch((err: Error) => console.error('[SERVER] Redis publish error:', err))
+          return
+        }
       } catch {
         // Not JSON, treat as regular terminal input
       }
@@ -898,7 +1320,7 @@ export async function startServer(options: ServerOptions) {
   })
 
   server.listen(port, () => {
-    console.log(`[SERVER] ✓ Learning environment ready at http://localhost:${port}`)
+    console.log(`[SERVER] Learning environment ready at http://localhost:${port}`)
   })
 
   // Create tutor bridge for sending messages to browser
@@ -937,6 +1359,14 @@ export async function startServer(options: ServerOptions) {
     },
     onSkipRequest: (handler: () => void) => {
       skipRequestHandler = handler
+    },
+    onClearStateRequest: (handler: () => void) => {
+      clearStateRequestHandler = handler
+    },
+    flushDatabase: async () => {
+      console.log('[SERVER] Flushing database', redisDb)
+      await redisPubClient.flushDb()
+      console.log('[SERVER] Database flushed')
     }
   }
 
@@ -957,11 +1387,14 @@ function processBuffer(
   const stripped = buffer.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\r/g, '')
   const lines = stripped.split('\n')
 
+  // Regex to match both prompt formats: "127.0.0.1:6379>" or "127.0.0.1:6379[N]>"
+  const promptRegex = /127\.0\.0\.1:6379(\[\d+\])?>/
+
   let output = ''
   let captureOutput = false
 
   for (const line of lines) {
-    if (captureOutput && !line.includes('127.0.0.1:6379>')) {
+    if (captureOutput && !promptRegex.test(line)) {
       output += line + '\n'
     }
     // Start capturing after we see the command being executed
