@@ -113,41 +113,44 @@ export async function startServer(options: ServerOptions) {
     * { box-sizing: border-box; }
     body {
       margin: 0; padding: 0;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #1e1e1e;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
       min-height: 100vh; display: flex; align-items: center; justify-content: center;
     }
     .container { max-width: 800px; width: 90%; padding: 40px; }
     .header { text-align: center; margin-bottom: 40px; }
-    .header h1 { color: white; font-size: 42px; margin: 0 0 10px 0; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-    .header p { color: rgba(255,255,255,0.9); font-size: 18px; margin: 0; }
+    .header h1 { color: #e0e0e0; font-size: 42px; margin: 0 0 10px 0; font-weight: 700; letter-spacing: -0.5px; }
+    .header p { color: #999; font-size: 18px; margin: 0; }
     .courses-grid { display: grid; gap: 20px; margin-bottom: 30px; }
     .course-card {
-      background: white; border-radius: 12px; padding: 24px; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      background: #2d2d2d; border-radius: 12px; padding: 24px; cursor: pointer; transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 1px solid #3e3e42;
     }
-    .course-card:hover { transform: translateY(-4px); box-shadow: 0 8px 12px rgba(0,0,0,0.15); }
+    .course-card:hover { transform: translateY(-4px); box-shadow: 0 4px 16px rgba(0,0,0,0.5); border-color: #007acc; }
     .course-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
     .level-badge { padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-    .level-beginner { background: #d4edda; color: #155724; }
-    .level-intermediate { background: #fff3cd; color: #856404; }
-    .level-advanced { background: #f8d7da; color: #721c24; }
-    .course-title { margin: 0; font-size: 20px; color: #2d3748; font-weight: 600; }
-    .course-summary { margin: 0; color: #718096; font-size: 15px; line-height: 1.6; }
+    .level-beginner { background: rgba(78, 201, 176, 0.15); color: #4ec9b0; border: 1px solid rgba(78, 201, 176, 0.3); }
+    .level-intermediate { background: rgba(255, 140, 66, 0.15); color: #ff8c42; border: 1px solid rgba(255, 140, 66, 0.3); }
+    .level-advanced { background: rgba(206, 76, 120, 0.15); color: #ce4c78; border: 1px solid rgba(206, 76, 120, 0.3); }
+    .course-title { margin: 0; font-size: 20px; color: #e0e0e0; font-weight: 600; }
+    .course-summary { margin: 0; color: #999; font-size: 15px; line-height: 1.6; }
     .custom-course-card {
-      background: rgba(255,255,255,0.95); border-radius: 12px; padding: 24px; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 2px dashed #cbd5e0;
+      background: #2d2d2d; border-radius: 12px; padding: 24px; cursor: pointer; transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 2px dashed #3e3e42;
     }
-    .custom-course-card:hover { transform: translateY(-4px); box-shadow: 0 8px 12px rgba(0,0,0,0.15); border-color: #667eea; }
-    .custom-icon { font-size: 14px; font-weight: 600; color: #667eea; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .custom-course-card:hover { transform: translateY(-4px); box-shadow: 0 4px 16px rgba(0,0,0,0.5); border-color: #007acc; }
+    .custom-icon { font-size: 14px; font-weight: 600; color: #007acc; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
     #custom-input-container { display: none; margin-top: 20px; }
     #custom-input-container.show { display: block; }
-    #custom-input { width: 100%; padding: 12px 16px; font-size: 16px; border: 2px solid #cbd5e0; border-radius: 8px; margin-bottom: 12px; font-family: inherit; }
-    #custom-input:focus { outline: none; border-color: #667eea; }
+    #custom-input { width: 100%; padding: 12px 16px; font-size: 16px; border: 1px solid #3e3e42; border-radius: 8px; margin-bottom: 12px; font-family: inherit; background: #1e1e1e; color: #d4d4d4; }
+    #custom-input:focus { outline: none; border-color: #007acc; }
+    #custom-input::placeholder { color: #666; }
     .button-group { display: flex; gap: 12px; }
     .btn { flex: 1; padding: 12px 24px; font-size: 16px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; font-family: inherit; }
-    .btn-primary { background: #667eea; color: white; }
-    .btn-primary:hover { background: #5568d3; }
-    .btn-secondary { background: #e2e8f0; color: #2d3748; }
-    .btn-secondary:hover { background: #cbd5e0; }
+    .btn-primary { background: #007acc; color: white; }
+    .btn-primary:hover { background: #006bb3; }
+    .btn-secondary { background: #3e3e42; color: #e0e0e0; border: 1px solid #3e3e42; }
+    .btn-secondary:hover { background: #4a4a4e; }
   </style>
 </head>
 <body>
