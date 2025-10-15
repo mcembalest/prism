@@ -23,21 +23,40 @@ struct PointResult {
 }
 
 #[tauri::command]
-fn take_screenshot() -> Result<String, String> {
+async fn take_screenshot(window: tauri::Window) -> Result<String, String> {
+    // Hide the Tauri window to exclude it from the screenshot
+    window.hide().map_err(|e| e.to_string())?;
+    
+    // Small delay to ensure window is hidden
+    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    
     let screens = Screen::all().map_err(|e| e.to_string())?;
     
     if screens.is_empty() {
+        // Show window again before returning error
+        let _ = window.show();
         return Err("No screens found".to_string());
     }
     
     let screen = &screens[0];
-    let screenshot = screen.capture().map_err(|e| e.to_string())?;
+    let screenshot = screen.capture().map_err(|e| {
+        // Show window again on error
+        let _ = window.show();
+        e.to_string()
+    })?;
     
     let mut buffer = Cursor::new(Vec::new());
     screenshot.write_to(&mut buffer, screenshots::image::ImageFormat::Png)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            // Show window again on error
+            let _ = window.show();
+            e.to_string()
+        })?;
     
     let base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, buffer.get_ref());
+    
+    // Show window again after screenshot is taken
+    window.show().map_err(|e| e.to_string())?;
     
     Ok(format!("data:image/png;base64,{}", base64))
 }

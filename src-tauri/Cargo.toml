@@ -27,3 +27,4 @@ screenshots = "0.8.10"
 base64 = "0.22.1"
 image = "0.25.6"
 reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["time"] }
