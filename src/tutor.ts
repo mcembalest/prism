@@ -438,7 +438,7 @@ function moveToNextExercise(state: SessionState): string {
       }
     }, 2000)
 
-    return `[COMPLETE] Lesson complete! You've finished ${state.lessonPlan.topic}.`
+    return `[COMPLETE] Done! Finished ${state.lessonPlan.topic}.`
   }
 }
 
@@ -468,7 +468,7 @@ async function handleCommand(state: SessionState, cmd: CapturedCommand): Promise
     if (state.diagnosticCommands.length >= 2) {
       console.log('[TUTOR] Calibrating lesson...')
 
-      sendTutorMessage(state, '[CALIBRATING] Calibrating your lesson...')
+      sendTutorMessage(state, '[CALIBRATING] Calibrating...')
 
       const lessonPlan = await generatePersonalizedLesson(
         state.context,
@@ -495,7 +495,7 @@ async function handleCommand(state: SessionState, cmd: CapturedCommand): Promise
         sendTutorMessage(state, message)
         return message
       } else {
-        const message = 'Sorry, I had trouble generating your lesson. Let\'s continue with basics.'
+        const message = 'Couldn\'t generate lesson. Using basics.'
         sendTutorMessage(state, message)
         return message
       }
@@ -505,9 +505,9 @@ async function handleCommand(state: SessionState, cmd: CapturedCommand): Promise
     const nextDiag = state.diagnosticDef?.diagnostics?.[1]
     let message: string
     if (nextDiag) {
-      message = `Good! One more to calibrate your level. Try: ${nextDiag}`
+      message = `Good. One more: ${nextDiag}`
     } else {
-      message = 'Good! One more to calibrate your level.'
+      message = 'Good. One more.'
     }
     sendTutorMessage(state, message)
     return message
@@ -690,9 +690,9 @@ function initializeLesson(
   // Send initial message to browser
   let initialMessage: string
   if (picked.firstCommand) {
-    initialMessage = `Let's see what you know! Try: ${picked.firstCommand}`
+    initialMessage = `Try: ${picked.firstCommand}`
   } else {
-    initialMessage = `Let's see what you know!`
+    initialMessage = `Let's begin.`
   }
   sendTutorMessage(state, initialMessage)
 
@@ -732,12 +732,12 @@ function handleSkipRequest(state: SessionState) {
   console.log('[TUTOR] Skip requested')
 
   if (state.mode !== 'lesson' || !state.lessonPlan) {
-    sendTutorMessage(state, 'Nothing to skip during diagnostic phase.')
+    sendTutorMessage(state, 'Nothing to skip in diagnostic.')
     return
   }
 
   if (state.currentExerciseIndex >= state.lessonPlan.exercises.length) {
-    sendTutorMessage(state, 'You\'ve completed all exercises!')
+    sendTutorMessage(state, 'All exercises done!')
     return
   }
 
@@ -755,7 +755,7 @@ function handleSkipRequest(state: SessionState) {
   }
 
   if (state.currentExerciseIndex >= state.lessonPlan.exercises.length) {
-    const message = `You've reached the end of the lesson. You skipped some exercises - consider reviewing them later!`
+    const message = `End of lesson. Some exercises were skipped.`
     sendTutorMessage(state, message)
     sendProgressUpdate(state)
     return
@@ -763,7 +763,7 @@ function handleSkipRequest(state: SessionState) {
 
   const nextExercise = state.lessonPlan.exercises[state.currentExerciseIndex]
   const exerciseMessage = presentExercise(state, nextExercise)
-  const message = `[SKIPPED] Moving to next exercise:\n\n${exerciseMessage}`
+  const message = `[SKIPPED] Next exercise:\n\n${exerciseMessage}`
   sendTutorMessage(state, message)
   sendProgressUpdate(state)
 }
@@ -860,7 +860,8 @@ async function runTutor() {
 
   // Browser opened with course selection UI
   console.log('[TUTOR] Browser opened')
-  console.log(`[TUTOR] URL: ${env.url}`)
+  console.log(`[TUTOR] Course Selection: http://localhost:3000`)
+  console.log(`[TUTOR] React App (Vite): ${env.url}`)
   console.log()
   console.log('[TUTOR] Waiting for course selection in browser...')
   console.log()

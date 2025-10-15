@@ -7,51 +7,51 @@
 // Common student questions mapped to helpful responses
 export const questionResponses: Record<string, string> = {
   // General questions
-  'what is redis': 'Redis is an in-memory data structure store. It\'s incredibly fast because data lives in RAM, and it supports rich data types like strings, hashes, lists, sets, and sorted sets.',
+  'what is redis': 'Redis: in-memory data store with rich types.',
 
-  'why use redis': 'Redis excels at caching, session management, real-time analytics, and message queues. Its speed (sub-millisecond latency) and rich data types make it perfect for high-performance applications.',
+  'why use redis': 'Fast caching, sessions, queues, analytics.',
 
-  'what is a hash': 'A hash in Redis is like a mini key-value store within a key. Think of it as a row in a table or an object in JavaScript - it has multiple fields and values. Perfect for representing objects like users or products.',
+  'what is a hash': 'Hash = key with fields (object-like).',
 
-  'what is a list': 'A Redis list is an ordered collection of strings, implemented as a linked list. You can push/pop from either end efficiently. Great for queues, activity feeds, or any ordered collection.',
+  'what is a list': 'List = ordered strings; push/pop ends.',
 
-  'what is a set': 'A set is an unordered collection of unique strings. Redis automatically handles deduplication. Use sets for tags, unique visitors, or when you need set operations like union and intersection.',
+  'what is a set': 'Set = unique, unordered strings.',
 
-  'difference between list and set': 'Lists maintain order and allow duplicates, while sets are unordered and guarantee uniqueness. Use lists when order matters (like a timeline), sets when you need uniqueness (like tags).',
+  'difference between list and set': 'Lists keep order, allow duplicates; sets don\'t.',
 
   // Command-specific questions
-  'what does hset do': 'HSET sets a field in a hash. Format: HSET key field value. You can set multiple fields at once: HSET user:1 name Alice age 30',
+  'what does hset do': 'HSET: set field(s) in a hash.',
 
-  'what does hget do': 'HGET retrieves a single field from a hash. Format: HGET key field. To get all fields, use HGETALL.',
+  'what does hget do': 'HGET: get one field from a hash.',
 
-  'what does lpush do': 'LPUSH adds elements to the left (head) of a list. Format: LPUSH key value1 value2. Think of it as prepending to an array.',
+  'what does lpush do': 'LPUSH: add to list head (left).',
 
-  'what does rpush do': 'RPUSH adds elements to the right (tail) of a list. Format: RPUSH key value1 value2. Think of it as appending to an array.',
+  'what does rpush do': 'RPUSH: add to list tail (right).',
 
-  'what does sadd do': 'SADD adds members to a set. Format: SADD key member1 member2. Duplicates are automatically ignored.',
+  'what does sadd do': 'SADD: add unique members to a set.',
 
-  'what does zadd do': 'ZADD adds members with scores to a sorted set. Format: ZADD key score1 member1 score2 member2. Members are sorted by score.',
+  'what does zadd do': 'ZADD: add member+score to sorted set.',
 
   // Conceptual questions
-  'when to use hashes': 'Use hashes when you have an object with multiple fields. They\'re more memory-efficient than separate keys and let you update individual fields without fetching the whole object.',
+  'when to use hashes': 'Use hashes for object-like data.',
 
-  'when to use lists': 'Use lists for ordered collections where you need to push/pop from either end. Perfect for activity feeds, message queues, or maintaining recent items.',
+  'when to use lists': 'Use lists for ordered queues/feeds.',
 
-  'what is ttl': 'TTL (Time To Live) shows how long until a key expires, in seconds. -1 means no expiration, -2 means the key doesn\'t exist. Use EXPIRE to set TTL.',
+  'what is ttl': 'TTL: seconds to expire; -1 none, -2 missing.',
 
-  'what is persistence': 'Redis can save data to disk for durability. RDB creates point-in-time snapshots, while AOF logs every write operation. By default, Redis persists data periodically.',
+  'what is persistence': 'Redis persists via RDB snapshots and AOF logs.',
 
   // Troubleshooting
-  'command not working': 'Let\'s debug this! Check: 1) Is your syntax correct? 2) Does the key exist? Use EXISTS to check. 3) Is it the right data type? Use TYPE to verify. Try the hint button for more specific help.',
+  'command not working': 'Check syntax, key exists (EXISTS), and type (TYPE).',
 
-  'wrong output': 'The output isn\'t what you expected? This is a great learning moment! Think about: What data type are you working with? What does the command documentation say? Try predicting the output step-by-step.',
+  'wrong output': 'Check data type, docs, and expected steps.',
 
   // Metacognitive support
-  'i dont understand': 'That\'s completely okay - Redis has many concepts to learn! Let\'s break it down. Which specific part is confusing? The command syntax, the data structure, or when to use it? I can explain differently or show an example.',
+  'i dont understand': 'No problem. Which part: syntax, type, or usage?',
 
-  'this is hard': 'You\'re doing great! Learning new technology takes time and practice. The fact that you\'re asking questions shows you\'re thinking deeply. Want to try a worked example first, or should we review the concept?',
+  'this is hard': 'You\'re doing fine. Want an example or recap?',
 
-  'can i skip': 'You can use the Skip button, but I encourage you to try! Understanding this concept will help with future exercises. Want a hint instead?'
+  'can i skip': 'You can skip; prefer a hint?'
 }
 
 // Keyword-based question matching
@@ -146,28 +146,28 @@ export function findResponseForQuestion(question: string): string | null {
   }
 
   // Default response
-  return 'That\'s a great question! While I don\'t have a specific answer for that, try breaking down the problem: What command are you working with? What do you expect to happen? Feel free to experiment in the terminal - that\'s the best way to learn!'
+  return 'Good question. Which command? Expected result? Try and observe.'
 }
 
 // Encouragement messages for correct answers
 export const encouragementMessages = [
-  'Excellent! You\'ve got it!',
-  'Perfect! Your understanding is solid.',
-  'Great work! You\'re thinking like a Redis expert.',
-  'Nicely done! That\'s exactly right.',
-  'Spot on! You\'re making great progress.',
-  'Fantastic! You understand this concept well.',
-  'Well done! Your reasoning is sound.',
-  'Impressive! You\'re mastering this quickly.'
+  'Nice.',
+  'Great.',
+  'Well done.',
+  'Perfect.',
+  'Excellent.',
+  'Strong work.',
+  'Good job.',
+  'On track.'
 ]
 
 // Scaffolding responses for wrong answers
 export const wrongAnswerResponses = [
-  'Not quite, but you\'re thinking about this! Let\'s reconsider...',
-  'That\'s a common misconception. Here\'s another way to think about it...',
-  'Good attempt! Let me clarify the concept...',
-  'I can see why you might think that. However...',
-  'Close! You\'re on the right track. Consider this...'
+  'Not yet. Rethink.',
+  'Close. Check syntax.',
+  'Good try. Here\'s a hint...',
+  'I see the idea, but no.',
+  'Almost. Consider the data type.'
 ]
 
 // Get random encouragement
@@ -190,8 +190,8 @@ export function generateProgressiveHints(exercise: any): HintLevel[] {
   // This could be enhanced to generate context-specific hints
   // For now, return generic progressive hints
   return [
-    { level: 1, hint: 'Think about what data structure you\'re working with. What operations does it support?' },
-    { level: 2, hint: 'Review the command syntax. Are you using the right order of arguments?' },
-    { level: 3, hint: exercise.hint || 'Try the suggested command and observe what happens.' }
+    { level: 1, hint: 'What data type is it?' },
+    { level: 2, hint: 'Check command argument order.' },
+    { level: 3, hint: exercise.hint || 'Run the suggested command.' }
   ]
 }
