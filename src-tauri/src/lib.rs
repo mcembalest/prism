@@ -22,6 +22,21 @@ struct PointResult {
     request_id: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct BoundingBox {
+    x_min: f64,
+    y_min: f64,
+    x_max: f64,
+    y_max: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct DetectResult {
+    objects: Vec<BoundingBox>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_id: Option<String>,
+}
+
 #[tauri::command]
 async fn take_screenshot(window: tauri::Window) -> Result<String, String> {
     // Hide the Tauri window to exclude it from the screenshot
@@ -113,10 +128,33 @@ async fn moondream_point(image_data_url: String, object: String, api_key: String
     Ok(result)
 }
 
+#[tauri::command]
+async fn moondream_detect(image_data_url: String, object: String, api_key: String) -> Result<DetectResult, String> {
+    let client = reqwest::Client::new();
+    let response = client
+        .post("https://api.moondream.ai/v1/detect")
+        .header("Content-Type", "application/json")
+        .header("X-Moondream-Auth", api_key)
+        .json(&serde_json::json!({
+            "image_url": image_data_url,
+            "object": object
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    if !response.status().is_success() {
+        return Err(format!("API error: {}", response.status()));
+    }
+    
+    let result: DetectResult = response.json().await.map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![take_screenshot, moondream_query, moondream_point])
+    .invoke_handler(tauri::generate_handler![take_screenshot, moondream_query, moondream_point, moondream_detect])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

@@ -17,6 +17,18 @@ export interface PointResult {
   request_id?: string;
 }
 
+export interface BoundingBox {
+  x_min: number;
+  y_min: number;
+  x_max: number;
+  y_max: number;
+}
+
+export interface DetectResult {
+  objects: BoundingBox[];
+  request_id?: string;
+}
+
 class MoondreamService {
   constructor() {
     if (!MOONDREAM_API_KEY) {
@@ -34,6 +46,14 @@ class MoondreamService {
 
   async point(imageDataUrl: string, object: string): Promise<PointResult> {
     return await invoke<PointResult>('moondream_point', {
+      imageDataUrl,
+      object,
+      apiKey: MOONDREAM_API_KEY
+    });
+  }
+
+  async detect(imageDataUrl: string, object: string): Promise<DetectResult> {
+    return await invoke<DetectResult>('moondream_detect', {
       imageDataUrl,
       object,
       apiKey: MOONDREAM_API_KEY

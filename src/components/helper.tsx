@@ -3,10 +3,10 @@ import { Card } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { DraggableHeader } from './DraggableHeader'
 import { Button } from '@/components/ui/button'
-import { Send, MessageSquare, Target } from 'lucide-react'
+import { Send, MessageSquare, Target, Search } from 'lucide-react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
-import { moondreamService, Point } from '@/services/moondream'
+import { moondreamService, Point, BoundingBox } from '@/services/moondream'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface Message {
@@ -15,6 +15,7 @@ interface Message {
   content: string
   image?: string
   points?: Point[]
+  boxes?: BoundingBox[]
 }
 
 export function Helper() {
@@ -22,14 +23,14 @@ export function Helper() {
     { 
       id: '1', 
       role: 'assistant', 
-      content: 'Hello! Ask me about your screen and I\'ll take a screenshot and analyze it for you.' 
+      content: 'Hello! Use Ask to query your screen, Point to locate objects, or Find to detect objects with bounding boxes.' 
     }
   ])
   const [input, setInput] = useState('')
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string>('')
-  const [mode, setMode] = useState<'answer' | 'point'>('answer')
+  const [mode, setMode] = useState<'answer' | 'point' | 'find'>('answer')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -88,6 +89,18 @@ export function Helper() {
           content: `Found ${pointResult.points.length} instance(s) of "${query}"`,
           image: screenshotDataUrl,
           points: pointResult.points
+        }
+        setMessages(prev => [...prev, assistantMessage])
+      } else if (mode === 'find') {
+        setStatusMessage(`🔍 Detecting "${query}"...`)
+        const detectResult = await moondreamService.detect(screenshotDataUrl, query)
+        
+        const assistantMessage: Message = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `Detected ${detectResult.objects.length} object(s) of "${query}"`,
+          image: screenshotDataUrl,
+          boxes: detectResult.objects
         }
         setMessages(prev => [...prev, assistantMessage])
       } else {
@@ -163,6 +176,22 @@ export function Helper() {
                               </div>
                             </div>
                           ))}
+                          {message.boxes && message.boxes.map((box, idx) => (
+                            <div
+                              key={idx}
+                              className="absolute border-2 border-green-500 bg-green-500/20 shadow-lg"
+                              style={{
+                                left: `${box.x_min * 100}%`,
+                                top: `${box.y_min * 100}%`,
+                                width: `${(box.x_max - box.x_min) * 100}%`,
+                                height: `${(box.y_max - box.y_min) * 100}%`
+                              }}
+                            >
+                              <div className="absolute -top-6 left-0 bg-green-500 text-white text-xs px-2 py-0.5 rounded whitespace-nowrap">
+                                {idx + 1}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center pointer-events-none">
                           <span className="text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity">Click to fullscreen</span>
@@ -177,15 +206,19 @@ export function Helper() {
         </div>
 
         <div className="p-4 border-t border-zinc-800/50 bg-zinc-900/50 backdrop-blur space-y-3">
-          <Tabs defaultValue="answer" onValueChange={(v) => setMode(v as 'answer' | 'point')}>
-            <TabsList className="grid w-full grid-cols-2 bg-zinc-800/80 border border-zinc-700/50">
+          <Tabs defaultValue="answer" onValueChange={(v) => setMode(v as 'answer' | 'point' | 'find')}>
+            <TabsList className="grid w-full grid-cols-3 bg-zinc-800/80 border border-zinc-700/50">
               <TabsTrigger value="answer" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
                 <MessageSquare className="h-4 w-4 mr-2" />
-                Answer Mode
+                Ask
               </TabsTrigger>
               <TabsTrigger value="point" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
                 <Target className="h-4 w-4 mr-2" />
-                Point Mode
+                Point
+              </TabsTrigger>
+              <TabsTrigger value="find" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
+                <Search className="h-4 w-4 mr-2" />
+                Find
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -201,7 +234,7 @@ export function Helper() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder={mode === 'point' ? 'Describe what to find...' : 'Ask a question...'}
+              placeholder={mode === 'find' ? 'Describe object to detect...' : mode === 'point' ? 'Describe what to find...' : 'Ask a question...'}
               className="flex-1 bg-zinc-800/80 text-white placeholder:text-zinc-500 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
             />
             <Button
