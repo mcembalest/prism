@@ -28,13 +28,7 @@ interface RustBoundingBox {
 }
 
 export function Helper() {
-    const [messages, setMessages] = useState<Message[]>([
-        {
-            id: '1',
-            role: 'assistant',
-            content: 'Ask for help with what\'s on your screen.'
-        }
-    ])
+    const [messages, setMessages] = useState<Message[]>([])
     const [input, setInput] = useState('')
     const [isProcessing, setIsProcessing] = useState(false)
     const [statusMessage, setStatusMessage] = useState<string>('')
@@ -149,6 +143,12 @@ export function Helper() {
 
     return (
         <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-zinc-800/50">
+                <div className="text-center space-y-1">
+                    <h1 className="text-2xl font-bold text-white">Help Mode</h1>
+                    <p className="text-sm text-zinc-400">Ask about what's on your screen</p>
+                </div>
+            </div>
             <div className="flex-1 overflow-hidden">
                 <ScrollArea className="h-full">
                     <div ref={scrollRef} className="p-4 space-y-3">
@@ -179,7 +179,7 @@ export function Helper() {
                                                 {message.points && message.points.map((point, idx) => (
                                                     <div
                                                         key={`point-${idx}`}
-                                                        className="absolute w-3 h-3 bg-red-500 border-2 border-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2 animate-pulse"
+                                                        className="absolute w-3 h-3 bg-red-500 border-2 border-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2"
                                                         style={{
                                                             left: `${point.x * 100}%`,
                                                             top: `${point.y * 100}%`
@@ -238,7 +238,7 @@ export function Helper() {
                 </Tabs>
 
                 {statusMessage && (
-                    <div className="text-xs text-blue-400 animate-pulse">
+                    <div className="text-xs text-blue-400">
                         {statusMessage}
                     </div>
                 )}
