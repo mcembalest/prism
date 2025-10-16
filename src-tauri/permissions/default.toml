@@ -1,0 +1,19 @@
+[default]
+description = "Default permissions for custom commands"
+permissions = ["allow-take-screenshot", "allow-open-fullscreen-viewer"]
+
+[[permission]]
+identifier = "allow-take-screenshot"
+description = "Allows the take_screenshot command"
+
+[permission.commands]
+allow = ["take_screenshot"]
+deny = []
+
+[[permission]]
+identifier = "allow-open-fullscreen-viewer"
+description = "Allows the open_fullscreen_viewer command"
+
+[permission.commands]
+allow = ["open_fullscreen_viewer"]
+deny = []

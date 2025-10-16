@@ -1,6 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-
-const MOONDREAM_API_KEY = (import.meta as any).env?.VITE_MOONDREAM_API_KEY || '';
+const API_KEY = import.meta.env.VITE_MOONDREAM_API_KEY ?? ''
+const BASE_URL = 'https://api.moondream.ai/v1'
 
 export interface Point {
   x: number;
@@ -30,35 +29,36 @@ export interface DetectResult {
 }
 
 class MoondreamService {
-  constructor() {
-    if (!MOONDREAM_API_KEY) {
-      console.warn('Moondream API key not found. Set VITE_MOONDREAM_API_KEY in .env file');
+  private async post<T>(path: string, body: object): Promise<T> {
+    if (!API_KEY) {
+      console.warn('Moondream API key missing. Set VITE_MOONDREAM_API_KEY')
     }
+    const res = await fetch(`${BASE_URL}/${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Moondream-Auth': API_KEY,
+      },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`API error ${res.status}: ${text}`)
+    }
+    return res.json() as Promise<T>
   }
 
-  async query(imageDataUrl: string, question: string): Promise<QueryResult> {
-    return await invoke<QueryResult>('moondream_query', {
-      imageDataUrl,
-      question,
-      apiKey: MOONDREAM_API_KEY
-    });
+  query(imageDataUrl: string, question: string) {
+    return this.post<QueryResult>('query', { image_url: imageDataUrl, question })
   }
 
-  async point(imageDataUrl: string, object: string): Promise<PointResult> {
-    return await invoke<PointResult>('moondream_point', {
-      imageDataUrl,
-      object,
-      apiKey: MOONDREAM_API_KEY
-    });
+  point(imageDataUrl: string, object: string) {
+    return this.post<PointResult>('point', { image_url: imageDataUrl, object })
   }
 
-  async detect(imageDataUrl: string, object: string): Promise<DetectResult> {
-    return await invoke<DetectResult>('moondream_detect', {
-      imageDataUrl,
-      object,
-      apiKey: MOONDREAM_API_KEY
-    });
+  detect(imageDataUrl: string, object: string) {
+    return this.post<DetectResult>('detect', { image_url: imageDataUrl, object })
   }
 }
 
-export const moondreamService = new MoondreamService();
+export const moondreamService = new MoondreamService()

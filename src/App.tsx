@@ -1,9 +1,9 @@
-import { Helper } from './components/helper'
+import { PrismContainer } from './components/PrismContainer'
 
 function App() {
   return (
-    <div className="h-screen w-full bg-zinc-950 dark">
-      <Helper />
+    <div className="h-screen w-full bg-transparent dark">
+      <PrismContainer />
     </div>
   )
 }

@@ -1,28 +1,37 @@
 use screenshots::Screen;
-use std::io::Cursor;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+struct WindowHide<'a>(&'a tauri::Window);
+
+impl<'a> WindowHide<'a> {
+    fn new(window: &'a tauri::Window) -> Result<Self, String> {
+        window.hide().map_err(|e| e.to_string())?;
+        Ok(Self(window))
+    }
+}
+
+impl<'a> Drop for WindowHide<'a> {
+    fn drop(&mut self) {
+        let _ = self.0.show();
+    }
+}
+
+#[derive(Clone, Serialize)]
+struct FullscreenPayload {
+    image: String,
+    points: Vec<Point>,
+    boxes: Vec<BoundingBox>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 struct Point {
     x: f64,
     y: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct QueryResult {
-    answer: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    request_id: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct PointResult {
-    points: Vec<Point>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    request_id: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct BoundingBox {
     x_min: f64,
     y_min: f64,
@@ -30,131 +39,108 @@ struct BoundingBox {
     y_max: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct DetectResult {
-    objects: Vec<BoundingBox>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    request_id: Option<String>,
-}
-
 #[tauri::command]
 async fn take_screenshot(window: tauri::Window) -> Result<String, String> {
-    // Hide the Tauri window to exclude it from the screenshot
-    window.hide().map_err(|e| e.to_string())?;
-    
+    // Hide the window while capturing
+    let _hide = WindowHide::new(&window)?;
+
     // Small delay to ensure window is hidden
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-    
+
     let screens = Screen::all().map_err(|e| e.to_string())?;
-    
+
     if screens.is_empty() {
-        // Show window again before returning error
-        let _ = window.show();
         return Err("No screens found".to_string());
     }
-    
+
     let screen = &screens[0];
-    let screenshot = screen.capture().map_err(|e| {
-        // Show window again on error
-        let _ = window.show();
-        e.to_string()
-    })?;
-    
-    let mut buffer = Cursor::new(Vec::new());
-    screenshot.write_to(&mut buffer, screenshots::image::ImageFormat::Png)
-        .map_err(|e| {
-            // Show window again on error
-            let _ = window.show();
-            e.to_string()
-        })?;
-    
-    let base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, buffer.get_ref());
-    
-    // Show window again after screenshot is taken
-    window.show().map_err(|e| e.to_string())?;
-    
+    let screenshot = screen.capture().map_err(|e| e.to_string())?;
+
+    // Encode to PNG bytes
+    let mut bytes: Vec<u8> = Vec::new();
+    // write_to expects a Write; wrap our Vec in a Cursor
+    let mut cursor = std::io::Cursor::new(&mut bytes);
+    screenshot
+        .write_to(&mut cursor, screenshots::image::ImageFormat::Png)
+        .map_err(|e| e.to_string())?;
+
+    let base64 = STANDARD.encode(&bytes);
     Ok(format!("data:image/png;base64,{}", base64))
 }
 
 #[tauri::command]
-async fn moondream_query(image_data_url: String, question: String, api_key: String) -> Result<QueryResult, String> {
-    let client = reqwest::Client::new();
-    let response = client
-        .post("https://api.moondream.ai/v1/query")
-        .header("Content-Type", "application/json")
-        .header("X-Moondream-Auth", api_key)
-        .json(&serde_json::json!({
-            "image_url": image_data_url,
-            "question": question
-        }))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    
-    let status = response.status();
-    let response_text = response.text().await.map_err(|e| e.to_string())?;
-    
-    if !status.is_success() {
-        return Err(format!("API error: {} - {}", status, response_text));
-    }
-    
-    log::info!("Moondream API response: {}", response_text);
-    
-    let result: QueryResult = serde_json::from_str(&response_text)
-        .map_err(|e| format!("Failed to parse response: {} - Response was: {}", e, response_text))?;
-    Ok(result)
-}
+async fn open_fullscreen_viewer(
+    app: tauri::AppHandle,
+    image: String,
+    points: Vec<Point>,
+    boxes: Vec<BoundingBox>,
+) -> Result<(), String> {
+    use tauri::Listener;
 
-#[tauri::command]
-async fn moondream_point(image_data_url: String, object: String, api_key: String) -> Result<PointResult, String> {
-    let client = reqwest::Client::new();
-    let response = client
-        .post("https://api.moondream.ai/v1/point")
-        .header("Content-Type", "application/json")
-        .header("X-Moondream-Auth", api_key)
-        .json(&serde_json::json!({
-            "image_url": image_data_url,
-            "object": object
-        }))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    
-    if !response.status().is_success() {
-        return Err(format!("API error: {}", response.status()));
+    // Close existing viewer window if any
+    if let Some(window) = app.get_webview_window("image-viewer") {
+        let _ = window.close();
     }
-    
-    let result: PointResult = response.json().await.map_err(|e| e.to_string())?;
-    Ok(result)
-}
 
-#[tauri::command]
-async fn moondream_detect(image_data_url: String, object: String, api_key: String) -> Result<DetectResult, String> {
-    let client = reqwest::Client::new();
-    let response = client
-        .post("https://api.moondream.ai/v1/detect")
-        .header("Content-Type", "application/json")
-        .header("X-Moondream-Auth", api_key)
-        .json(&serde_json::json!({
-            "image_url": image_data_url,
-            "object": object
-        }))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    
-    if !response.status().is_success() {
-        return Err(format!("API error: {}", response.status()));
-    }
-    
-    let result: DetectResult = response.json().await.map_err(|e| e.to_string())?;
-    Ok(result)
+    // Get screen dimensions for sizing
+    let screens = Screen::all().map_err(|e| e.to_string())?;
+    let screen = screens.get(0).ok_or("No screen found")?;
+
+    let screen_width = screen.display_info.width as f64;
+    let screen_height = screen.display_info.height as f64;
+
+    // Use 80% of screen size for the window
+    let window_width = screen_width * 0.8;
+    let window_height = screen_height * 0.8;
+
+    // Create centered window
+    let window = WebviewWindowBuilder::new(
+        &app,
+        "image-viewer",
+        WebviewUrl::App("fullscreen.html".into())
+    )
+    .title("Image Viewer")
+    .inner_size(window_width, window_height)
+    .resizable(true)
+    .center()
+    .focused(true)
+    .always_on_top(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    // Clone data for the async block
+    let window_clone = window.clone();
+    let payload = FullscreenPayload { image, points, boxes };
+
+    // Listen for the "viewer-ready" event from the window
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut tx_option = Some(tx);
+
+    window.once("viewer-ready", move |_event| {
+        if let Some(tx) = tx_option.take() {
+            let _ = tx.send(());
+        }
+    });
+
+    // Spawn a task to wait for ready signal and send data
+    tokio::spawn(async move {
+        // Wait for ready signal with timeout
+        let _ = tokio::time::timeout(
+            tokio::time::Duration::from_secs(5),
+            rx
+        ).await;
+
+        // Send the data
+        let _ = window_clone.emit("fullscreen-data", payload);
+    });
+
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![take_screenshot, moondream_query, moondream_point, moondream_detect])
+    .invoke_handler(tauri::generate_handler![take_screenshot, open_fullscreen_viewer])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

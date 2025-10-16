@@ -1,42 +1,31 @@
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { X, Minus } from 'lucide-react'
 import { Button } from './ui/button'
-import { useIsTauri } from '@/lib/tauri-hooks'
 
 export function DraggableHeader() {
-  const isTauri = useIsTauri()
-
   const handleClose = () => {
-    if (isTauri) {
-      try {
-        getCurrentWindow().close()
-      } catch (error) {
-        console.error('Failed to close window:', error)
-      }
-    } else {
-      console.log('Close button clicked (browser mode)')
+    try {
+      getCurrentWindow().close()
+    } catch {
+      console.log('Close (browser mode)')
     }
   }
 
   const handleMinimize = () => {
-    if (isTauri) {
-      try {
-        getCurrentWindow().minimize()
-      } catch (error) {
-        console.error('Failed to minimize window:', error)
-      }
-    } else {
-      console.log('Minimize button clicked (browser mode)')
+    try {
+      getCurrentWindow().minimize()
+    } catch {
+      console.log('Minimize (browser mode)')
     }
   }
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 bg-widget-surface border-b border-widget-border">
+    <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/80 border-b border-zinc-800/50 rounded-t-2xl">
       <div
         data-tauri-drag-region
         className="flex items-center gap-2 flex-1 cursor-move select-none"
       >
-        <span className="text-sm font-semibold text-white">Prism Helper</span>
+        <span className="text-xs font-semibold text-white/90">Prism</span>
       </div>
 
       <div className="flex items-center gap-1">
@@ -60,4 +49,3 @@ export function DraggableHeader() {
     </div>
   )
 }
-
