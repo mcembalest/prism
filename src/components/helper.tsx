@@ -139,7 +139,6 @@ export function Helper() {
         <div className="flex-1 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-zinc-800/50">
                 <div className="text-center space-y-1">
-                    <h1 className="text-2xl font-bold text-white">Help Mode</h1>
                     <p className="text-sm text-zinc-400">Get help with your current workflow</p>
                 </div>
             </div>
