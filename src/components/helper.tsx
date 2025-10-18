@@ -62,6 +62,36 @@ export function Helper() {
         }
     }
 
+    const openScreenOverlay = async (
+        points: Point[] = [],
+        boxes: BoundingBox[] = [],
+        walkthroughSteps?: number,
+        currentStep?: number
+    ) => {
+        try {
+            console.log('openScreenOverlay called with:', { points, boxes, walkthroughSteps, currentStep })
+            // Convert Point[] to RustPoint[] format
+            const rustPoints: RustPoint[] = points.map(p => ({ x: p.x, y: p.y }))
+            // Convert BoundingBox[] to RustBoundingBox[] format
+            const rustBoxes: RustBoundingBox[] = boxes.map(b => ({
+                x_min: b.x_min,
+                y_min: b.y_min,
+                x_max: b.x_max,
+                y_max: b.y_max
+            }))
+            console.log('Invoking open_screen_overlay command')
+            const result = await invoke('open_screen_overlay', {
+                points: rustPoints,
+                boxes: rustBoxes,
+                walkthrough_steps: walkthroughSteps,
+                current_step: currentStep
+            })
+            console.log('open_screen_overlay command returned:', result)
+        } catch (error) {
+            console.error('Failed to open screen overlay:', error)
+        }
+    }
+
     const handleSend = async () => {
         if (!input.trim() || isProcessing) return
 
@@ -112,6 +142,14 @@ export function Helper() {
                     points: pointResult.points
                 }
                 setMessages(prev => [...prev, assistantMessage])
+
+                // Show overlay on screen
+                await openScreenOverlay(
+                    pointResult.points,
+                    [],
+                    pointResult.points.length,
+                    pointResult.points.length
+                )
             } else if (intent === 'detect') {
                 // Take screenshot only when needed
                 setStatusMessage('📸')
@@ -128,6 +166,14 @@ export function Helper() {
                     boxes: detectResult.objects
                 }
                 setMessages(prev => [...prev, assistantMessage])
+
+                // Show overlay on screen
+                await openScreenOverlay(
+                    [],
+                    detectResult.objects,
+                    detectResult.objects.length,
+                    detectResult.objects.length
+                )
             } else if (intent === 'walkthrough') {
                 // Take screenshot only when needed
                 setStatusMessage('📸')
@@ -144,6 +190,14 @@ export function Helper() {
                     points: walkthroughResult.points
                 }
                 setMessages(prev => [...prev, assistantMessage])
+
+                // Show overlay on screen
+                await openScreenOverlay(
+                    walkthroughResult.points,
+                    [],
+                    walkthroughResult.points.length,
+                    walkthroughResult.points.length
+                )
             } else {
                 // 'query' intent - needs screenshot to answer questions about the screen
                 setStatusMessage('📸')
@@ -307,7 +361,7 @@ export function Helper() {
                                 }
                             }
                         }}
-                        placeholder="Ask for help with your screen..."
+                        placeholder="Ask for help"
                         className="flex-1 bg-zinc-800/80 text-white placeholder:text-zinc-500 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
                     />
                     <Button

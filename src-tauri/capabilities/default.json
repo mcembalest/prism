@@ -6,7 +6,8 @@
     "main",
     "image-viewer",
     "skill-graph-viewer",
-    "settings"
+    "settings",
+    "screen-overlay"
   ],
   "permissions": [
     "core:default",
@@ -16,6 +17,7 @@
     "core:window:allow-maximize",
     "core:window:allow-set-size",
     "core:window:allow-set-position",
+    "core:window:allow-set-ignore-cursor-events",
     "core:event:allow-listen",
     "core:event:allow-emit",
     "core:event:allow-emit-to",
@@ -23,6 +25,7 @@
     "allow-open-fullscreen-viewer",
     "allow-get-skills-data",
     "allow-open-skill-graph-viewer",
-    "allow-open-settings-window"
+    "allow-open-settings-window",
+    "allow-open-screen-overlay"
   ]
 }

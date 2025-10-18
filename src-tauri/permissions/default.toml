@@ -5,7 +5,8 @@ permissions = [
   "allow-open-fullscreen-viewer",
   "allow-get-skills-data",
   "allow-open-skill-graph-viewer",
-  "allow-open-settings-window"
+  "allow-open-settings-window",
+  "allow-open-screen-overlay"
 ]
 
 [[permission]]
@@ -46,4 +47,12 @@ description = "Allows the open_settings_window command"
 
 [permission.commands]
 allow = ["open_settings_window"]
+deny = []
+
+[[permission]]
+identifier = "allow-open-screen-overlay"
+description = "Allows the open_screen_overlay command"
+
+[permission.commands]
+allow = ["open_screen_overlay"]
 deny = []
