@@ -337,13 +337,13 @@ export function Learning() {
                         <div className="max-w-md mx-auto mb-4">
                             <Button
                                 onClick={handleOpenSkillGraph}
-                                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/20 rounded-xl py-6"
+                                className="w-full bg-zinc-800/50 border border-zinc-700/50 hover:bg-zinc-800/70 hover:border-purple-500/50 text-white rounded-xl py-6 transition-all"
                             >
-                                <BookOpenCheck className="h-5 w-5 mr-2" />
-                                <span className="text-base font-semibold">Open Skill Graph Explorer</span>
+                                <BookOpenCheck className="h-5 w-5 mr-2 text-purple-400" />
+                                <span className="text-base font-semibold">Browse Skill Graph</span>
                             </Button>
                         </div>
-
+{/* 
                         <div className="space-y-4 max-w-md mx-auto">
                             {mockCourses.map(course => {
                                 const totalSteps = course.tutorials.reduce((sum, t) => sum + t.steps.length, 0)
@@ -383,7 +383,7 @@ export function Learning() {
                                     </button>
                                 )
                             })}
-                        </div>
+                        </div> */}
                     </div>
                 </ScrollArea>
             </div>
