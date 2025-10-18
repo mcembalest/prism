@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { Send, RotateCcw } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { visionService, Point, BoundingBox } from '@/services/vision'
 import { geminiService } from '@/services/gemini'
@@ -33,6 +33,7 @@ export function Helper() {
     const [isProcessing, setIsProcessing] = useState(false)
     const [statusMessage, setStatusMessage] = useState<string>('')
     const scrollRef = useRef<HTMLDivElement>(null)
+    const inputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -61,13 +62,11 @@ export function Helper() {
         }
     }
 
-    const handleReset = () => {
-        setMessages([])
-        setInput('')
-    }
-
     const handleSend = async () => {
         if (!input.trim() || isProcessing) return
+
+        // Clear previous conversation - helper is stateless
+        setMessages([])
 
         setIsProcessing(true)
         const userMessage: Message = {
@@ -85,12 +84,23 @@ export function Helper() {
             setStatusMessage('Analyzing request...')
             const intent = await geminiService.classifyIntent(query)
 
-            // Take screenshot
-            setStatusMessage('📸')
-            const screenshotDataUrl = await invoke<string>('take_screenshot')
-
             // Execute based on classified intent
-            if (intent === 'point') {
+            if (intent === 'text-only') {
+                // No screenshot needed for text-only queries
+                setStatusMessage('Answering...')
+                const queryResult = await geminiService.answerTextOnly(query)
+
+                const assistantMessage: Message = {
+                    id: Date.now().toString(),
+                    role: 'assistant',
+                    content: queryResult.answer
+                }
+                setMessages(prev => [...prev, assistantMessage])
+            } else if (intent === 'point') {
+                // Take screenshot only when needed
+                setStatusMessage('📸')
+                const screenshotDataUrl = await invoke<string>('take_screenshot')
+
                 setStatusMessage(`Finding "${query}"...`)
                 const pointResult = await visionService.point(screenshotDataUrl, query)
 
@@ -103,6 +113,10 @@ export function Helper() {
                 }
                 setMessages(prev => [...prev, assistantMessage])
             } else if (intent === 'detect') {
+                // Take screenshot only when needed
+                setStatusMessage('📸')
+                const screenshotDataUrl = await invoke<string>('take_screenshot')
+
                 setStatusMessage(`Detecting "${query}"...`)
                 const detectResult = await visionService.detect(screenshotDataUrl, query)
 
@@ -114,7 +128,27 @@ export function Helper() {
                     boxes: detectResult.objects
                 }
                 setMessages(prev => [...prev, assistantMessage])
+            } else if (intent === 'walkthrough') {
+                // Take screenshot only when needed
+                setStatusMessage('📸')
+                const screenshotDataUrl = await invoke<string>('take_screenshot')
+
+                setStatusMessage(`Creating walkthrough for "${query}"...`)
+                const walkthroughResult = await visionService.walkthrough(screenshotDataUrl, query)
+
+                const assistantMessage: Message = {
+                    id: Date.now().toString(),
+                    role: 'assistant',
+                    content: walkthroughResult.narrative,
+                    image: screenshotDataUrl,
+                    points: walkthroughResult.points
+                }
+                setMessages(prev => [...prev, assistantMessage])
             } else {
+                // 'query' intent - needs screenshot to answer questions about the screen
+                setStatusMessage('📸')
+                const screenshotDataUrl = await invoke<string>('take_screenshot')
+
                 setStatusMessage('Answering...')
                 const queryResult = await visionService.query(screenshotDataUrl, query)
 
@@ -224,19 +258,55 @@ export function Helper() {
                     </div>
                 )}
                 <div className="flex gap-2">
-                    <Button
-                        onClick={handleReset}
-                        variant="outline"
-                        className="bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-700/80 border-zinc-700/50 rounded-xl px-3 transition-all"
-                        title="Reset chat"
-                    >
-                        <RotateCcw className="h-4 w-4" />
-                    </Button>
                     <input
+                        ref={inputRef}
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        onPaste={(e) => {
+                            const t = e.clipboardData?.getData('text')
+                            if (typeof t === 'string' && t.length > 0) {
+                                e.preventDefault()
+                                const el = inputRef.current
+                                const start = el?.selectionStart ?? input.length
+                                const end = el?.selectionEnd ?? input.length
+                                const newValue = input.slice(0, start) + t + input.slice(end)
+                                setInput(newValue)
+                                requestAnimationFrame(() => {
+                                    if (el) {
+                                        const pos = start + t.length
+                                        el.setSelectionRange(pos, pos)
+                                    }
+                                })
+                            }
+                        }}
+                        onKeyDown={async (e) => {
+                            if (e.key === 'Enter') {
+                                handleSend()
+                                return
+                            }
+                            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') {
+                                try {
+                                    const clip = await navigator.clipboard?.readText?.()
+                                    if (clip) {
+                                        e.preventDefault()
+                                        const el = inputRef.current
+                                        const start = el?.selectionStart ?? input.length
+                                        const end = el?.selectionEnd ?? input.length
+                                        const newValue = input.slice(0, start) + clip + input.slice(end)
+                                        setInput(newValue)
+                                        requestAnimationFrame(() => {
+                                            if (el) {
+                                                const pos = start + clip.length
+                                                el.setSelectionRange(pos, pos)
+                                            }
+                                        })
+                                    }
+                                } catch {
+                                    // ignore
+                                }
+                            }
+                        }}
                         placeholder="Ask for help with your screen..."
                         className="flex-1 bg-zinc-800/80 text-white placeholder:text-zinc-500 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
                     />

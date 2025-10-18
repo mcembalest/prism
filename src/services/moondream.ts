@@ -28,6 +28,12 @@ export interface DetectResult {
   request_id?: string;
 }
 
+export interface WalkthroughResult {
+  points: Point[];
+  narrative: string;
+  request_id?: string;
+}
+
 class MoondreamService {
   private async post<T>(path: string, body: object): Promise<T> {
     if (!API_KEY) {
@@ -58,6 +64,17 @@ class MoondreamService {
 
   detect(imageDataUrl: string, object: string) {
     return this.post<DetectResult>('detect', { image_url: imageDataUrl, object })
+  }
+
+  async walkthrough(imageDataUrl: string, question: string): Promise<WalkthroughResult> {
+    // Moondream doesn't have a dedicated walkthrough endpoint
+    // Fall back to query and return empty points
+    const result = await this.query(imageDataUrl, question)
+    return {
+      points: [],
+      narrative: result.answer,
+      request_id: result.request_id
+    }
   }
 }
 

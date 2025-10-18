@@ -1,4 +1,3 @@
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
 
 export interface Point {
@@ -28,7 +27,13 @@ export interface DetectResult {
   request_id?: string
 }
 
-export type IntentType = 'query' | 'point' | 'detect'
+export interface WalkthroughResult {
+  points: Point[]
+  narrative: string
+  request_id?: string
+}
+
+export type IntentType = 'query' | 'point' | 'detect' | 'walkthrough' | 'text-only'
 
 type GeminiPart =
   | { text: string }
@@ -65,8 +70,9 @@ async function callGemini(
     responseMimeType?: string
   }
 ): Promise<GeminiResponse> {
+  const API_KEY = getGeminiApiKey()
   if (!API_KEY) {
-    console.warn('Gemini API key missing. Set VITE_GEMINI_API_KEY')
+    throw new Error('Gemini API key not set. Open Settings to add it.')
   }
   const body: any = { contents: [{ parts }] }
   if (opts?.responseJson || opts?.responseSchema || opts?.responseMimeType) {
@@ -117,14 +123,16 @@ interface GeminiBoxOrMaskItem {
 class GeminiService {
   async classifyIntent(query: string): Promise<IntentType> {
     const prompt = [
-      'Classify the user intent into one of three categories:',
-      '- "query": General questions, explanations, or informational requests (e.g., "what is...", "how does...", "tell me about...", "explain...")',
-      '- "point": Requests to locate/find/identify a specific UI element or object that returns coordinates (e.g., "where is...", "find the...", "click on...", "locate...")',
-      '- "detect": Requests to detect/bound/highlight multiple instances of objects that returns bounding boxes (e.g., "find all...", "detect...", "show all...", "highlight all...")',
+      'Classify the user intent into one of five categories:',
+      '- "text-only": Questions that can be answered without seeing the screen (e.g., "what is 2+2", "tell me a joke", "explain quantum physics", "what\'s the weather")',
+      '- "walkthrough": Step-by-step guides or tutorials about what\'s on screen (e.g., "how do I...", "show me how to...", "guide me through...", "walk me through...")',
+      '- "query": Questions about what\'s currently visible on screen (e.g., "what is on my screen", "what color is this button", "read this text", "what app is this")',
+      '- "point": Requests to locate/find/identify a specific UI element or object on screen (e.g., "where is...", "find the...", "click on...", "locate...")',
+      '- "detect": Requests to detect/bound/highlight multiple instances of objects on screen (e.g., "find all...", "detect...", "show all...", "highlight all...")',
       '',
       `User query: "${query}"`,
       '',
-      'Respond with only one of: query, point, or detect'
+      'Respond with only one of: text-only, walkthrough, query, point, or detect'
     ].join('\n')
 
     const resp = await callGemini(
@@ -133,17 +141,25 @@ class GeminiService {
         responseMimeType: 'text/x.enum',
         responseSchema: {
           type: 'STRING',
-          enum: ['query', 'point', 'detect']
+          enum: ['text-only', 'walkthrough', 'query', 'point', 'detect']
         }
       }
     )
 
     const result = extractFirstText(resp) as IntentType
-    // Fallback to 'query' if the response is not one of the expected values
-    if (!['query', 'point', 'detect'].includes(result)) {
-      return 'query'
+    // Fallback to 'text-only' if the response is not one of the expected values
+    if (!['text-only', 'walkthrough', 'query', 'point', 'detect'].includes(result)) {
+      return 'text-only'
     }
     return result
+  }
+
+  async answerTextOnly(question: string): Promise<QueryResult> {
+    const resp = await callGemini([
+      { text: `${question}\n\nRespond in 1-2 sentences maximum. Be concise and direct.` },
+    ])
+    const answer = extractFirstText(resp)
+    return { answer }
   }
 
   async query(imageDataUrl: string, question: string): Promise<QueryResult> {
@@ -219,6 +235,51 @@ class GeminiService {
 
     return { objects }
   }
+
+  async walkthrough(imageDataUrl: string, question: string): Promise<WalkthroughResult> {
+    const inline = dataUrlToInlineData(imageDataUrl)
+    const prompt = [
+      'Analyze the screen and create a step-by-step walkthrough for the user\'s question.',
+      `Question: ${question}`,
+      '',
+      'Identify the UI elements the user needs to interact with IN ORDER (e.g., first click File, then click New, then click Document).',
+      'For each step, provide the center coordinates of the UI element.',
+      '',
+      'Return JSON with two fields:',
+      '1. "steps": array of objects with "box_2d" as [y0, x0, y1, x1], normalized 0..1000',
+      '2. "narrative": a concise walkthrough explanation (2-4 sentences) that describes the steps naturally',
+      '',
+      'Example format:',
+      '{"steps": [{"box_2d": [100, 50, 150, 200]}, {"box_2d": [200, 100, 250, 300]}], "narrative": "First, click the File menu in the top left. Then select New from the dropdown to create a new document."}',
+      '',
+      'Do not include markdown fences or extra text.'
+    ].join('\n')
+
+    const resp = await callGemini([
+      { inline_data: inline },
+      { text: prompt },
+    ], { responseJson: true })
+
+    const jsonText = extractFirstText(resp)
+    const parsed = safeParseJson<{ steps?: GeminiBoxOrMaskItem[], narrative?: string }>(jsonText)
+
+    if (!parsed || !parsed.steps || !parsed.narrative) {
+      return { points: [], narrative: 'Unable to generate walkthrough for this screen.' }
+    }
+
+    const points: Point[] = []
+    for (const item of parsed.steps) {
+      const b = item.box_2d
+      if (!b || b.length !== 4) continue
+      const [y0, x0, y1, x1] = b
+      if (!(y1 > y0) || !(x1 > x0)) continue
+      const cx = ((x0 + x1) / 2) / 1000
+      const cy = ((y0 + y1) / 2) / 1000
+      if (isFinite(cx) && isFinite(cy)) points.push({ x: clamp01(cx), y: clamp01(cy) })
+    }
+
+    return { points, narrative: parsed.narrative }
+  }
 }
 
 function clamp01(n: number): number {
@@ -227,3 +288,11 @@ function clamp01(n: number): number {
 }
 
 export const geminiService = new GeminiService()
+
+function getGeminiApiKey(): string {
+  try {
+    return localStorage.getItem('prism_gemini_api_key') || ''
+  } catch {
+    return ''
+  }
+}

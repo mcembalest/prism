@@ -28,16 +28,21 @@ export interface DetectResult {
   request_id?: string
 }
 
+export interface WalkthroughResult {
+  points: Point[]
+  narrative: string
+  request_id?: string
+}
+
 type Service = {
   query(imageDataUrl: string, question: string): Promise<QueryResult>
   point(imageDataUrl: string, object: string): Promise<PointResult>
   detect(imageDataUrl: string, object: string): Promise<DetectResult>
+  walkthrough(imageDataUrl: string, question: string): Promise<WalkthroughResult>
 }
 
-const PROVIDER = (import.meta.env.VITE_VISION_PROVIDER as 'moondream' | 'gemini' | undefined)
-  ?? (import.meta.env.VITE_MOONDREAM_API_KEY ? 'moondream' : 'gemini')
-
-const impl: Service = PROVIDER === 'gemini' ? gm : md
+// Use Gemini by default and manage keys via Settings (localStorage).
+// This avoids relying on build-time .env secrets.
+const impl: Service = gm
 
 export const visionService: Service = impl
-

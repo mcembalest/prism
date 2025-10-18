@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-sync.py - Intelligent bidirectional sync for skill formats
+sync.py - bidirectional sync for skill formats
 
 Usage: python sync.py
 

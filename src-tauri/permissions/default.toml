@@ -1,6 +1,12 @@
 [default]
 description = "Default permissions for custom commands"
-permissions = ["allow-take-screenshot", "allow-open-fullscreen-viewer", "allow-get-skills-data", "allow-open-skill-graph-viewer"]
+permissions = [
+  "allow-take-screenshot",
+  "allow-open-fullscreen-viewer",
+  "allow-get-skills-data",
+  "allow-open-skill-graph-viewer",
+  "allow-open-settings-window"
+]
 
 [[permission]]
 identifier = "allow-take-screenshot"
@@ -32,4 +38,12 @@ description = "Allows the open_skill_graph_viewer command"
 
 [permission.commands]
 allow = ["open_skill_graph_viewer"]
+deny = []
+
+[[permission]]
+identifier = "allow-open-settings-window"
+description = "Allows the open_settings_window command"
+
+[permission.commands]
+allow = ["open_settings_window"]
 deny = []

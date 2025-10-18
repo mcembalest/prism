@@ -1,6 +1,5 @@
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { BookOpenCheck } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 
 export function Learning() {

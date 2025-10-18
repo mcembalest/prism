@@ -199,10 +199,36 @@ async fn open_skill_graph_viewer(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
+    // Close existing settings window if any
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.close();
+    }
+
+    let _window = WebviewWindowBuilder::new(
+        &app,
+        "settings",
+        WebviewUrl::App("settings.html".into())
+    )
+    .title("Prism Settings")
+    .inner_size(560.0, 420.0)
+    .resizable(true)
+    .decorations(false)
+    .transparent(true)
+    .center()
+    .focused(true)
+    .always_on_top(false)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![take_screenshot, open_fullscreen_viewer, get_skills_data, open_skill_graph_viewer])
+    .invoke_handler(tauri::generate_handler![take_screenshot, open_fullscreen_viewer, get_skills_data, open_skill_graph_viewer, open_settings_window])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -210,6 +236,33 @@ pub fn run() {
             .level(log::LevelFilter::Info)
             .build(),
         )?;
+      }
+      // App menu with Settings (best-effort; harmless on unsupported platforms)
+      #[cfg(target_os = "macos")]
+      {
+        use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+        // Build a simple app menu with a Settings item (Cmd+,)
+        let settings = MenuItemBuilder::new("Settings…")
+          .id("settings")
+          .accelerator("Cmd+,")
+          .build(app)?;
+        let app_menu = SubmenuBuilder::new(app, "Prism")
+          .item(&settings)
+          .build()?;
+        let menu = MenuBuilder::new(app)
+          .item(&app_menu)
+          .build()?;
+
+        app.set_menu(menu)?;
+
+        app.on_menu_event(|app, event| {
+          if event.id() == "settings" {
+            let handle = app.clone();
+            tauri::async_runtime::spawn(async move {
+              let _ = open_settings_window(handle).await;
+            });
+          }
+        });
       }
       Ok(())
     })

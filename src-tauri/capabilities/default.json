@@ -5,7 +5,8 @@
   "windows": [
     "main",
     "image-viewer",
-    "skill-graph-viewer"
+    "skill-graph-viewer",
+    "settings"
   ],
   "permissions": [
     "core:default",
@@ -21,6 +22,7 @@
     "allow-take-screenshot",
     "allow-open-fullscreen-viewer",
     "allow-get-skills-data",
-    "allow-open-skill-graph-viewer"
+    "allow-open-skill-graph-viewer",
+    "allow-open-settings-window"
   ]
 }
