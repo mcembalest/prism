@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { listen } from '@tauri-apps/api/event'
-import { Point, BoundingBox } from '@/services/moondream'
+import { Point, BoundingBox } from '@/services/vision'
 
 interface FullscreenData {
     image: string

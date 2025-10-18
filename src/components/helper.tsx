@@ -3,7 +3,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Send, MessageSquare, Target, RotateCcw, Box } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
-import { moondreamService, Point, BoundingBox } from '@/services/moondream'
+import { visionService, Point, BoundingBox } from '@/services/vision'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface Message {
@@ -63,13 +63,7 @@ export function Helper() {
     }
 
     const handleReset = () => {
-        setMessages([
-            {
-                id: Date.now().toString(),
-                role: 'assistant',
-                content: 'Hello! Ask me about your screen and I\'ll take a screenshot and analyze it for you.'
-            }
-        ])
+        setMessages([])
         setInput('')
     }
 
@@ -88,12 +82,12 @@ export function Helper() {
         setInput('')
 
         try {
-            setStatusMessage('📸 Taking screenshot...')
+            setStatusMessage('📸')
             const screenshotDataUrl = await invoke<string>('take_screenshot')
 
             if (mode === 'point') {
-                setStatusMessage(`🎯 Finding "${query}"...`)
-                const pointResult = await moondreamService.point(screenshotDataUrl, query)
+                setStatusMessage(`Finding "${query}"...`)
+                const pointResult = await visionService.point(screenshotDataUrl, query)
 
                 const assistantMessage: Message = {
                     id: Date.now().toString(),
@@ -104,8 +98,8 @@ export function Helper() {
                 }
                 setMessages(prev => [...prev, assistantMessage])
             } else if (mode === 'detect') {
-                setStatusMessage(`📦 Detecting "${query}"...`)
-                const detectResult = await moondreamService.detect(screenshotDataUrl, query)
+                setStatusMessage(`Detecting "${query}"...`)
+                const detectResult = await visionService.detect(screenshotDataUrl, query)
 
                 const assistantMessage: Message = {
                     id: Date.now().toString(),
@@ -116,8 +110,8 @@ export function Helper() {
                 }
                 setMessages(prev => [...prev, assistantMessage])
             } else {
-                setStatusMessage('🤔 Analyzing screenshot...')
-                const queryResult = await moondreamService.query(screenshotDataUrl, query)
+                setStatusMessage('Analyzing screen...')
+                const queryResult = await visionService.query(screenshotDataUrl, query)
 
                 const assistantMessage: Message = {
                     id: Date.now().toString(),
@@ -146,7 +140,7 @@ export function Helper() {
             <div className="p-4 border-b border-zinc-800/50">
                 <div className="text-center space-y-1">
                     <h1 className="text-2xl font-bold text-white">Help Mode</h1>
-                    <p className="text-sm text-zinc-400">Ask about what's on your screen</p>
+                    <p className="text-sm text-zinc-400">Get help with your current workflow</p>
                 </div>
             </div>
             <div className="flex-1 overflow-hidden">
@@ -259,7 +253,7 @@ export function Helper() {
                         placeholder={
                             mode === 'point' ? 'Describe what to find...' :
                             mode === 'detect' ? 'Describe what to detect...' :
-                            'Ask a question...'
+                            'Ask for help'
                         }
                         className="flex-1 bg-zinc-800/80 text-white placeholder:text-zinc-500 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
                     />
