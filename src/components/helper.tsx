@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { Send, MessageSquare, Target, RotateCcw, Box } from 'lucide-react'
+import { Send, RotateCcw } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { visionService, Point, BoundingBox } from '@/services/vision'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { geminiService } from '@/services/gemini'
 
 interface Message {
     id: string
@@ -32,7 +32,6 @@ export function Helper() {
     const [input, setInput] = useState('')
     const [isProcessing, setIsProcessing] = useState(false)
     const [statusMessage, setStatusMessage] = useState<string>('')
-    const [mode, setMode] = useState<'answer' | 'point' | 'detect'>('answer')
     const scrollRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
@@ -82,10 +81,16 @@ export function Helper() {
         setInput('')
 
         try {
+            // Classify intent
+            setStatusMessage('Analyzing request...')
+            const intent = await geminiService.classifyIntent(query)
+
+            // Take screenshot
             setStatusMessage('📸')
             const screenshotDataUrl = await invoke<string>('take_screenshot')
 
-            if (mode === 'point') {
+            // Execute based on classified intent
+            if (intent === 'point') {
                 setStatusMessage(`Finding "${query}"...`)
                 const pointResult = await visionService.point(screenshotDataUrl, query)
 
@@ -97,7 +102,7 @@ export function Helper() {
                     points: pointResult.points
                 }
                 setMessages(prev => [...prev, assistantMessage])
-            } else if (mode === 'detect') {
+            } else if (intent === 'detect') {
                 setStatusMessage(`Detecting "${query}"...`)
                 const detectResult = await visionService.detect(screenshotDataUrl, query)
 
@@ -110,7 +115,7 @@ export function Helper() {
                 }
                 setMessages(prev => [...prev, assistantMessage])
             } else {
-                setStatusMessage('Analyzing screen...')
+                setStatusMessage('Answering...')
                 const queryResult = await visionService.query(screenshotDataUrl, query)
 
                 const assistantMessage: Message = {
@@ -213,23 +218,6 @@ export function Helper() {
             </div>
 
             <div className="p-4 border-t border-zinc-800/50 bg-zinc-900/50 backdrop-blur space-y-3">
-                <Tabs defaultValue="answer" onValueChange={(v) => setMode(v as 'answer' | 'point' | 'detect')}>
-                    <TabsList className="grid w-full grid-cols-3 bg-zinc-800/80 border border-zinc-700/50 rounded-xl">
-                        <TabsTrigger value="answer" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
-                            <MessageSquare className="h-4 w-4 mr-2" />
-                            Answer
-                        </TabsTrigger>
-                        <TabsTrigger value="point" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
-                            <Target className="h-4 w-4 mr-2" />
-                            Point
-                        </TabsTrigger>
-                        <TabsTrigger value="detect" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
-                            <Box className="h-4 w-4 mr-2" />
-                            Detect
-                        </TabsTrigger>
-                    </TabsList>
-                </Tabs>
-
                 {statusMessage && (
                     <div className="text-xs text-blue-400">
                         {statusMessage}
@@ -249,11 +237,7 @@ export function Helper() {
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                        placeholder={
-                            mode === 'point' ? 'Describe what to find...' :
-                            mode === 'detect' ? 'Describe what to detect...' :
-                            'Ask for help'
-                        }
+                        placeholder="Ask for help with your screen..."
                         className="flex-1 bg-zinc-800/80 text-white placeholder:text-zinc-500 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
                     />
                     <Button

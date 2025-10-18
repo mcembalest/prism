@@ -28,6 +28,8 @@ export interface DetectResult {
   request_id?: string
 }
 
+export type IntentType = 'query' | 'point' | 'detect'
+
 type GeminiPart =
   | { text: string }
   | { inline_data: { mime_type: string; data: string } }
@@ -55,13 +57,28 @@ function dataUrlToInlineData(dataUrl: string): { mime_type: string; data: string
   return { mime_type: match[1], data: match[2] }
 }
 
-async function callGemini(parts: GeminiPart[], opts?: { responseJson?: boolean }): Promise<GeminiResponse> {
+async function callGemini(
+  parts: GeminiPart[],
+  opts?: {
+    responseJson?: boolean
+    responseSchema?: any
+    responseMimeType?: string
+  }
+): Promise<GeminiResponse> {
   if (!API_KEY) {
     console.warn('Gemini API key missing. Set VITE_GEMINI_API_KEY')
   }
   const body: any = { contents: [{ parts }] }
-  if (opts?.responseJson) {
-    body.generationConfig = { response_mime_type: 'application/json' }
+  if (opts?.responseJson || opts?.responseSchema || opts?.responseMimeType) {
+    body.generationConfig = {}
+    if (opts.responseMimeType) {
+      body.generationConfig.response_mime_type = opts.responseMimeType
+    } else if (opts.responseJson) {
+      body.generationConfig.response_mime_type = 'application/json'
+    }
+    if (opts.responseSchema) {
+      body.generationConfig.response_schema = opts.responseSchema
+    }
   }
   const res = await fetch(`${BASE_URL}`, {
     method: 'POST',
@@ -98,11 +115,42 @@ interface GeminiBoxOrMaskItem {
 }
 
 class GeminiService {
+  async classifyIntent(query: string): Promise<IntentType> {
+    const prompt = [
+      'Classify the user intent into one of three categories:',
+      '- "query": General questions, explanations, or informational requests (e.g., "what is...", "how does...", "tell me about...", "explain...")',
+      '- "point": Requests to locate/find/identify a specific UI element or object that returns coordinates (e.g., "where is...", "find the...", "click on...", "locate...")',
+      '- "detect": Requests to detect/bound/highlight multiple instances of objects that returns bounding boxes (e.g., "find all...", "detect...", "show all...", "highlight all...")',
+      '',
+      `User query: "${query}"`,
+      '',
+      'Respond with only one of: query, point, or detect'
+    ].join('\n')
+
+    const resp = await callGemini(
+      [{ text: prompt }],
+      {
+        responseMimeType: 'text/x.enum',
+        responseSchema: {
+          type: 'STRING',
+          enum: ['query', 'point', 'detect']
+        }
+      }
+    )
+
+    const result = extractFirstText(resp) as IntentType
+    // Fallback to 'query' if the response is not one of the expected values
+    if (!['query', 'point', 'detect'].includes(result)) {
+      return 'query'
+    }
+    return result
+  }
+
   async query(imageDataUrl: string, question: string): Promise<QueryResult> {
     const inline = dataUrlToInlineData(imageDataUrl)
     const resp = await callGemini([
       { inline_data: inline },
-      { text: question },
+      { text: `${question}\n\nRespond in 1-2 sentences maximum. Be concise and direct.` },
     ])
     const answer = extractFirstText(resp)
     return { answer }
