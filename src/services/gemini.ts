@@ -65,7 +65,7 @@ async function callGemini(parts: GeminiPart[], opts?: { responseJson?: boolean }
   }
   const res = await fetch(`${BASE_URL}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY || '' },
     body: JSON.stringify(body),
   })
   if (!res.ok) {

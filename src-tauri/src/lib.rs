@@ -137,10 +137,72 @@ async fn open_fullscreen_viewer(
     Ok(())
 }
 
+#[tauri::command]
+async fn get_skills_data(app: tauri::AppHandle) -> Result<String, String> {
+    use std::path::PathBuf;
+
+    // Get the path to the data directory
+    let data_path: PathBuf = if cfg!(debug_assertions) {
+        // Development mode - use CARGO_MANIFEST_DIR relative path
+        // This assumes we're running from project root
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        PathBuf::from(manifest_dir)
+            .parent()
+            .ok_or("Failed to get parent of CARGO_MANIFEST_DIR")?
+            .join("data")
+            .join("skills.yaml")
+    } else {
+        // Production mode - read from bundled resources
+        app.path().resource_dir()
+            .map_err(|e| format!("Failed to get resource dir: {}", e))?
+            .join("data")
+            .join("skills.yaml")
+    };
+
+    // Read the YAML file
+    let yaml_content = std::fs::read_to_string(&data_path)
+        .map_err(|e| format!("Failed to read skills.yaml from {:?}: {}", data_path, e))?;
+
+    // Parse YAML to serde_json::Value
+    let yaml_data: serde_yaml::Value = serde_yaml::from_str(&yaml_content)
+        .map_err(|e| format!("Failed to parse YAML: {}", e))?;
+
+    // Convert to JSON string
+    let json_string = serde_json::to_string(&yaml_data)
+        .map_err(|e| format!("Failed to convert to JSON: {}", e))?;
+
+    Ok(json_string)
+}
+
+#[tauri::command]
+async fn open_skill_graph_viewer(app: tauri::AppHandle) -> Result<(), String> {
+    // Close existing viewer window if any
+    if let Some(window) = app.get_webview_window("skill-graph-viewer") {
+        let _ = window.close();
+    }
+
+    // Create the skill graph viewer window
+    let _window = WebviewWindowBuilder::new(
+        &app,
+        "skill-graph-viewer",
+        WebviewUrl::App("skillgraph.html".into())
+    )
+    .title("Skill Graph Explorer")
+    .inner_size(1200.0, 800.0)
+    .resizable(true)
+    .center()
+    .focused(true)
+    .always_on_top(false)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![take_screenshot, open_fullscreen_viewer])
+    .invoke_handler(tauri::generate_handler![take_screenshot, open_fullscreen_viewer, get_skills_data, open_skill_graph_viewer])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

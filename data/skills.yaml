@@ -1,0 +1,948 @@
+skills:
+- name: CI/CD Observability
+  level: Advanced
+  prerequisites:
+  - GitHub Actions Fundamentals
+  tasks:
+  - name: Debug a failing workflow using logs and re-runs
+    steps:
+    - tag: GitHub UI
+      text: Open a failed run, review the `Summary` and individual step logs.
+    - tag: GitHub UI
+      text: Re-run failed jobs with the `Rerun jobs` button or enable debug logging.
+    - tag: Editor
+      text: Add more logging, artifact uploads, or `set -x` in scripts to capture details.
+  - name: Upload artifacts and view them from a run
+    steps:
+    - tag: GitHub Actions
+      text: Upload build outputs or test reports as artifacts.
+    - tag: GitHub UI
+      text: Download and inspect artifacts from the run page.
+    - tag: Browser
+      text: Share artifact links internally for debugging.
+- name: Cross-Repo Actions
+  level: Advanced
+  prerequisites:
+  - Reusable Workflows
+  tasks:
+  - name: Consume artifacts or outputs across repos
+    steps:
+    - tag: GitHub Actions
+      text: Upload artifacts in one workflow using `actions/upload-artifact`.
+    - tag: GitHub Actions
+      text: In another repo, access artifacts via API or by fetching releases/assets.
+    - tag: GitHub UI
+      text: Verify artifact availability and integrity.
+  - name: Trigger a workflow in another repo via repository_dispatch
+    steps:
+    - tag: Editor
+      text: In target repo, create a workflow listening to `repository_dispatch`.
+    - tag: Editor
+      text: In source repo, create a workflow that calls GitHub API to dispatch an event to target.
+    - tag: GitHub UI
+      text: Add a PAT/Token as secret with repo permissions.
+    - tag: GitHub UI
+      text: Run source workflow and confirm target workflow is triggered.
+- name: GitHub as a Platform
+  level: Advanced
+  prerequisites:
+  - Git Basics
+  tasks:
+  - name: Create and install a GitHub App with proper permissions
+    steps:
+    - tag: GitHub UI
+      text: Go to Settings > Developer settings > GitHub Apps > New GitHub App.
+    - tag: GitHub UI
+      text: Configure permissions (contents, issues, pull requests) minimally.
+    - tag: GitHub UI
+      text: Generate a private key, install the app on a repository, and test via API (JWT).
+- name: Monorepo Management
+  level: Advanced
+  prerequisites:
+  - Branching and Merging
+  tasks:
+  - name: Configure CI caching and affected builds
+    steps:
+    - tag: Editor
+      text: Configure CI to cache node_modules and build outputs.
+    - tag: Editor
+      text: Add a job to detect changed packages and run tasks selectively.
+    - tag: GitHub UI
+      text: Verify CI only builds affected packages on PRs.
+  - name: Set up a Yarn/NPM workspaces monorepo
+    steps:
+    - tag: Editor
+      text: Create a root `package.json` with `workspaces` config (Yarn/npm).
+    - tag: Editor
+      text: Create `packages/<pkg-a>` and `packages/<pkg-b>` with their own `package.json`.
+    - tag: Terminal
+      text: Install deps at root; verify hoisting.
+    - tag: Editor
+      text: Add a shared library used by both packages.
+- name: Organization Management
+  level: Advanced
+  prerequisites:
+  - Personal Access Tokens
+  tasks:
+  - name: Create an org, a team, and set repo permissions
+    steps:
+    - tag: GitHub UI
+      text: Create an organization (Settings > New organization).
+    - tag: GitHub UI
+      text: Create a team, add members, and set team permissions on a repository.
+    - tag: GitHub UI
+      text: Verify access via a member account.
+- name: Personal Access Tokens
+  level: Advanced
+  prerequisites:
+  - Git Basics
+  tasks:
+  - name: Create a fine-grained PAT
+    steps:
+    - tag: GitHub UI
+      text: Go to Settings > Developer settings > Personal access tokens.
+    - tag: GitHub UI
+      text: Create a fine-grained token, select repositories and minimal scopes.
+    - tag: GitHub UI
+      text: Copy and store the token securely (password manager).
+  - name: Use a PAT with GitHub CLI and/or git remotes
+    steps:
+    - tag: Terminal
+      text: 'Use the PAT when prompted for HTTPS auth (username: your GitHub username, password: PAT).'
+    - tag: GitHub CLI
+      text: Authenticate with (1) and paste the token if needed.
+    - tag: Terminal
+      text: Verify by pushing or using the API.
+    commands:
+    - gh auth login
+- name: Release Automation
+  level: Advanced
+  prerequisites:
+  - Tagging and Versioning
+  tasks:
+  - name: Configure semantic-release for automated versioning
+    steps:
+    - tag: Editor
+      text: Add semantic-release config and plugins (npm, changelog, github).
+    - tag: GitHub UI
+      text: Create a token with appropriate scopes and add as secret.
+    - tag: GitHub Actions
+      text: Create a release workflow triggered on main.
+    - tag: GitHub UI
+      text: Merge PRs with Conventional Commits and observe automated releases.
+  - name: Generate changelogs and GitHub releases automatically
+    steps:
+    - tag: GitHub UI
+      text: Verify releases are created automatically.
+    - tag: GitHub UI
+      text: Check generated changelog and tag alignment.
+    - tag: Browser
+      text: Share release notes with stakeholders.
+- name: State Changes & Collaboration Events
+  level: Advanced
+  prerequisites:
+  - Branching and Merging
+  tasks:
+  - name: Diagram your repo’s collaboration model
+    steps:
+    - tag: Editor
+      text: Create a diagram (e.g., in Markdown or a diagram tool) showing commits → PRs → Actions → releases.
+    - tag: GitHub UI
+      text: Store the diagram in the repo wiki or docs directory.
+    - tag: Browser
+      text: Review with the team and iterate on collaboration rules.
+  - name: Set up CODEOWNERS and a PR lifecycle policy
+    steps:
+    - tag: Editor
+      text: Add a `CODEOWNERS` file mapping paths to owners (e.g., `@org/team`).
+    - tag: GitHub UI
+      text: Commit to repo root or `.github/` directory.
+    - tag: GitHub UI
+      text: Verify PRs touching those paths now require owner reviews.
+- name: Webhooks and APIs
+  level: Advanced
+  prerequisites:
+  - GitHub CLI (gh)
+  tasks:
+  - name: Create a repository webhook
+    steps:
+    - tag: GitHub UI
+      text: Go to Repo Settings > Webhooks > Add webhook.
+    - tag: GitHub UI
+      text: Enter payload URL (ngrok/localtunnel for local dev), choose content type `application/json`.
+    - tag: GitHub UI
+      text: Select events (e.g., `push`, `pull_request`) and add the webhook.
+    - tag: Browser
+      text: Verify delivery logs after triggering an event.
+  - name: Query PRs with the GraphQL API
+    steps:
+    - tag: Terminal
+      text: Create a GraphQL query file (e.g., `prs.graphql`).
+    - tag: Terminal
+      text: Use curl or (1) to execute.
+    - tag: Terminal
+      text: Parse JSON response and confirm data matches expectations.
+    commands:
+    - gh api graphql -f query=@prs.graphql
+  - name: Use REST API to create an issue programmatically
+    steps:
+    - tag: GitHub CLI
+      text: Retrieve a token or use (1) to confirm auth.
+    - tag: Terminal
+      text: Run (2) to create an issue programmatically.
+    - tag: GitHub UI
+      text: Verify the new issue appears.
+    commands:
+    - gh auth status
+    - "curl -H \"Authorization: token <PAT>\" -d '{\"title\":\"API-created issue\"}' https://api.github.com/repos/<owner>/<repo>/issues"
+- name: .gitignore and LFS
+  level: Basic
+  prerequisites:
+  - Git Basics
+  tasks:
+  - name: Add a .gitignore for common languages
+    steps:
+    - tag: Editor
+      text: Create or open the `.gitignore` file at the repo root.
+    - tag: Editor
+      text: Add patterns for your language/framework (e.g., `node_modules/`, `.env`).
+    - tag: Terminal
+      text: Verify ignored files with (1) (they should not appear).
+    - tag: Terminal
+      text: 'Commit the change: (2) then (3).'
+    - tag: GitHub UI
+      text: Push and verify the file is present.
+    commands:
+    - git status
+    - git add .gitignore
+    - git commit -m "Add .gitignore"
+  - name: Configure Git LFS and track large files
+    steps:
+    - tag: Terminal
+      text: Install Git LFS if needed ((1)).
+    - tag: Terminal
+      text: 'Track file types: (2) (replace with your large file type).'
+    - tag: Editor
+      text: Commit the `.gitattributes` file created by LFS.
+    - tag: Terminal
+      text: Add a large file and stage it normally with (3).
+    - tag: Terminal
+      text: Commit and push; verify upload via Git LFS transfer output.
+    - tag: GitHub UI
+      text: Confirm large files show LFS pointer metadata.
+    commands:
+    - git lfs install
+    - git lfs track "*.psd"
+    - git add <file>
+- name: Branching and Merging
+  level: Basic
+  prerequisites:
+  - Git Basics
+  tasks:
+  - name: Create and switch to a new branch
+    steps:
+    - tag: Terminal
+      text: Create and switch to a new branch using (1).
+    - tag: Terminal
+      text: Confirm branch with (2).
+    - tag: Editor
+      text: Make changes on the new branch.
+    - tag: Terminal
+      text: Stage and commit your changes with meaningful messages.
+    - tag: Terminal
+      text: 'Push the branch: (3).'
+    commands:
+    - git checkout -b feature/<name>
+    - git branch --show-current
+    - git push -u origin feature/<name>
+  - name: Merge a feature branch locally (fast-forward)
+    steps:
+    - tag: Terminal
+      text: 'Switch to main: (1) and update: (2).'
+    - tag: Terminal
+      text: 'Merge the feature branch: (3) (or without flag).'
+    - tag: Terminal
+      text: Resolve any conflicts if they arise and complete the merge.
+    - tag: Terminal
+      text: 'Push the updated main: (4).'
+    - tag: GitHub UI
+      text: Verify the merge on the repository commits view.
+    commands:
+    - git checkout main
+    - git pull
+    - git merge --ff-only feature/<name>
+    - git push origin main
+  - name: Merge via Pull Request on GitHub
+    steps:
+    - tag: GitHub UI
+      text: Open your repository and click `Compare & pull request` for your branch.
+    - tag: GitHub UI
+      text: 'Enter a clear title and description, link issues with `Fixes #<id>` if applicable.'
+    - tag: GitHub UI
+      text: Assign reviewers and ensure required checks are passing.
+    - tag: GitHub UI
+      text: Click `Merge` (e.g., `Squash and merge`), confirm, and delete the branch.
+    - tag: Terminal
+      text: 'Pull latest changes locally: (1).'
+    commands:
+    - git pull origin main
+- name: Conflict Resolution
+  level: Basic
+  prerequisites:
+  - Branching and Merging
+  tasks:
+  - name: Abort a conflicted merge and restore state
+    steps:
+    - tag: Terminal
+      text: When a merge goes wrong, run (1) to roll back the merge state.
+    - tag: Terminal
+      text: For rebase issues, run (2) to restore the previous state.
+    - tag: Terminal
+      text: Verify with (3) that you are back to a clean working tree.
+    - tag: Terminal
+      text: Optionally reset hard to a known commit (4).
+    commands:
+    - git merge --abort
+    - git rebase --abort
+    - git status
+    - git reset --hard <SHA>
+  - name: Resolve a merge conflict and complete the merge
+    steps:
+    - tag: Terminal
+      text: Attempt merge or rebase to surface conflicts ((1) or rebase).
+    - tag: Editor
+      text: Open conflicted files and resolve conflict markers `<<<<<<`, `======`, `>>>>>>`.
+    - tag: Terminal
+      text: Mark files resolved with (2).
+    - tag: Terminal
+      text: 'Complete the operation: (3) or (4).'
+    - tag: Terminal
+      text: Run tests locally (if applicable) and commit the resolution.
+    - tag: GitHub UI
+      text: Push and confirm checks pass on the PR.
+    commands:
+    - git merge feature/<name>
+    - git add <file>
+    - git merge --continue
+    - git rebase --continue
+- name: Git Basics
+  level: Basic
+  prerequisites: []
+  tasks:
+  - name: Clone an existing repository
+    steps:
+    - tag: GitHub UI
+      text: Navigate to the repository you want to clone and click the `Code` button.
+    - tag: GitHub UI
+      text: Copy the HTTPS or SSH URL.
+    - tag: Terminal
+      text: Navigate to your workspace directory using (1).
+    - tag: Terminal
+      text: Run (2) to clone the repository locally.
+    - tag: Terminal
+      text: (3) into the cloned repository.
+    - tag: Terminal
+      text: Verify remotes with (4) and list branches with (5).
+    - tag: Editor
+      text: Open the project in your editor (e.g., `code .` for VS Code).
+    commands:
+    - cd <folder>
+    - git clone <REPO_URL>
+    - cd <repo>
+    - git remote -v
+    - git branch -a
+  - name: Initialize a new repository
+    steps:
+    - tag: Terminal
+      text: Open the terminal and navigate to your project directory using (1).
+    - tag: Terminal
+      text: Run (2) to initialize an empty repository.
+    - tag: Editor
+      text: Create an initial file (e.g., `README.md`) and write a short description.
+    - tag: Terminal
+      text: Stage changes with (3).
+    - tag: Terminal
+      text: Commit with (4).
+    - tag: GitHub UI
+      text: Click `New` to create a repository, set name/visibility, and create it.
+    - tag: Terminal
+      text: Link the remote using (5).
+    - tag: Terminal
+      text: 'Push the default branch: (6) then (7).'
+    - tag: Browser
+      text: Open the repository page and verify your initial commit is present.
+    commands:
+    - cd <folder>
+    - git init
+    - git add README.md
+    - git commit -m "Initial commit"
+    - git remote add origin <REMOTE_URL>
+    - git branch -M main
+    - git push -u origin main
+  - name: Make a commit
+    steps:
+    - tag: Editor
+      text: Modify an existing file or create a new one (e.g., `app.js` or `README.md`).
+    - tag: Terminal
+      text: Run (1) to view changed files.
+    - tag: Terminal
+      text: Stage specific files using (2) or stage all with (3).
+    - tag: Terminal
+      text: Commit changes using (4).
+    - tag: Terminal
+      text: View commit history with (5).
+    commands:
+    - git status
+    - git add <file>
+    - git add .
+    - git commit -m "Describe the change"
+    - git log --oneline -n 5
+  - name: Pull and fetch remote changes
+    steps:
+    - tag: Terminal
+      text: Fetch updates without merging using (1).
+    - tag: Terminal
+      text: Compare local and remote with (2).
+    - tag: Terminal
+      text: Merge updates with (3).
+    - tag: Terminal
+      text: Resolve any merge conflicts if prompted, then commit the merge.
+    - tag: Terminal
+      text: Verify your local branch is up to date with (4).
+    commands:
+    - git fetch origin
+    - git log --oneline ..origin/main
+    - git pull origin main
+    - git status
+  - name: Push commits to GitHub
+    steps:
+    - tag: Terminal
+      text: Ensure a remote is configured with (1); add one if missing.
+    - tag: Terminal
+      text: 'Push your branch: (2).'
+    - tag: GitHub UI
+      text: Open the repository page and confirm your commits are visible.
+    - tag: GitHub UI
+      text: If prompted, set the default branch or create a Pull Request.
+    commands:
+    - git remote -v
+    - git push -u origin <branch>
+- name: GitHub CLI (gh)
+  level: Basic
+  prerequisites:
+  - Git Basics
+  tasks:
+  - name: Authenticate and create a repo with gh
+    steps:
+    - tag: GitHub CLI
+      text: Run (1) and follow prompts (protocol, SSH/HTTPS).
+    - tag: GitHub CLI
+      text: 'Create a repo: (2).'
+    - tag: GitHub CLI
+      text: Verify repo exists on GitHub.
+    commands:
+    - gh auth login
+    - gh repo create <name> --public --source=. --push
+  - name: Create a pull request using gh
+    steps:
+    - tag: GitHub CLI
+      text: Create a branch and commit changes.
+    - tag: GitHub CLI
+      text: Run (1).
+    - tag: GitHub UI
+      text: Review and merge the PR.
+    commands:
+    - gh pr create --fill --base main --head <branch>
+- name: Issues and Templates
+  level: Basic
+  prerequisites:
+  - Git Basics
+  tasks:
+  - name: Close issues automatically via PR keywords
+    steps:
+    - tag: GitHub UI
+      text: 'In a PR description, include `Fixes #<issue_number>` or `Closes #<issue_number>`.'
+    - tag: GitHub UI
+      text: Merge the PR once approved.
+    - tag: GitHub UI
+      text: Verify the linked issue is closed automatically.
+  - name: Create an issue with labels and a milestone
+    steps:
+    - tag: GitHub UI
+      text: Open Issues > New issue and pick a template.
+    - tag: GitHub UI
+      text: Add labels (e.g., `bug`, `enhancement`) and select a milestone.
+    - tag: GitHub UI
+      text: Assign to yourself or a teammate and submit the issue.
+  - name: Create issue templates (bug, feature)
+    steps:
+    - tag: GitHub UI
+      text: Go to Settings > General > Features > Set up templates (or .github/ISSUE_TEMPLATE).
+    - tag: GitHub UI
+      text: Create `bug_report.md` and `feature_request.md` with structured fields.
+    - tag: GitHub UI
+      text: Commit templates to the `.github/ISSUE_TEMPLATE` directory.
+    - tag: Browser
+      text: Test by opening a new issue and choosing a template.
+- name: Pull Requests and Reviews
+  level: Basic
+  prerequisites:
+  - Branching and Merging
+  tasks:
+  - name: Merge a pull request with squash and delete the branch
+    steps:
+    - tag: GitHub UI
+      text: Ensure all required checks and reviews are passing.
+    - tag: GitHub UI
+      text: Click the dropdown next to `Merge` and choose `Squash and merge`.
+    - tag: GitHub UI
+      text: Edit the final commit message if needed and confirm the merge.
+    - tag: GitHub UI
+      text: Delete the source branch when prompted.
+    - tag: Terminal
+      text: 'Pull latest main locally: (1).'
+    commands:
+    - git pull origin main
+  - name: Open a pull request with a clear description
+    steps:
+    - tag: GitHub UI
+      text: Navigate to your repo and click `Compare & pull request` for your branch.
+    - tag: GitHub UI
+      text: Provide a clear title and context (why, what, how).
+    - tag: GitHub UI
+      text: 'Link related issues using keywords like `Closes #123`.'
+    - tag: GitHub UI
+      text: Assign reviewers and set labels/milestones as needed.
+    - tag: GitHub UI
+      text: Create the PR and monitor checks.
+  - name: Review a pull request and request changes
+    steps:
+    - tag: GitHub UI
+      text: "Open the PR's `Files changed` tab."
+    - tag: GitHub UI
+      text: Leave inline comments and summarize feedback in the Review panel.
+    - tag: GitHub UI
+      text: Choose `Request changes` or `Approve` as appropriate.
+    - tag: GitHub UI
+      text: Re-run or wait for checks; ensure required reviews are complete.
+- name: Semantic Commits
+  level: Basic
+  prerequisites:
+  - Git Basics
+  tasks:
+  - name: Enforce Conventional Commits with a linter in CI
+    steps:
+    - tag: Editor
+      text: Add commitlint config (e.g., `@commitlint/config-conventional`).
+    - tag: Terminal
+      text: Install husky and commitlint; set up a commit-msg hook.
+    - tag: GitHub Actions
+      text: Add a workflow step to validate commit messages on PR.
+    - tag: GitHub UI
+      text: Verify failing PRs are blocked until messages are fixed.
+  - name: Write Conventional Commits
+    steps:
+    - tag: Editor
+      text: 'Craft commit messages using the pattern `type(scope): summary` (e.g., `feat(ui): add modal`).'
+    - tag: Editor
+      text: Include body and footer when needed (breaking changes, issue refs).
+    - tag: Terminal
+      text: Review (1) to ensure consistent format.
+    commands:
+    - git log
+- name: Tagging and Versioning
+  level: Basic
+  prerequisites:
+  - Git Basics
+  tasks:
+  - name: Create an annotated tag
+    steps:
+    - tag: Terminal
+      text: 'Create an annotated tag: (1).'
+    - tag: Terminal
+      text: List tags with (2).
+    - tag: Terminal
+      text: 'Push tags: (3).'
+    - tag: GitHub UI
+      text: Verify the tag appears under Releases > Tags.
+    commands:
+    - git tag -a v1.0.0 -m "Release v1.0.0"
+    - git tag --list
+    - git push origin --tags
+  - name: Push tags and create a GitHub release
+    steps:
+    - tag: Terminal
+      text: Push latest tags with (1).
+    - tag: GitHub UI
+      text: Go to Releases and click `Draft a new release`.
+    - tag: GitHub UI
+      text: Select the tag (or create one), add notes, and publish the release.
+    - tag: Browser
+      text: Share the release URL with stakeholders.
+    commands:
+    - git push origin --tags
+- name: Branch Protection Rules
+  level: Intermediate
+  prerequisites:
+  - Pull Requests and Reviews
+  tasks:
+  - name: Configure a branch protection rule on main
+    steps:
+    - tag: GitHub UI
+      text: Go to Settings > Branches > Add rule for `main`.
+    - tag: GitHub UI
+      text: Require pull request reviews, status checks, and conversation resolution.
+    - tag: GitHub UI
+      text: Save changes and note the rule effects.
+  - name: Validate the rule by attempting a direct push
+    steps:
+    - tag: Terminal
+      text: 'Attempt to push directly to main: (1).'
+    - tag: GitHub UI
+      text: Observe the rejection and error message.
+    - tag: GitHub UI
+      text: Open a PR instead and satisfy required checks to merge.
+    commands:
+    - git push origin main
+- name: Code Scanning and Security Policies
+  level: Intermediate
+  prerequisites:
+  - Dependabot Setup
+  tasks:
+  - name: Add SECURITY.md and respond to an alert
+    steps:
+    - tag: Editor
+      text: Add `SECURITY.md` with reporting instructions and SLAs.
+    - tag: GitHub UI
+      text: Commit to `.github/` directory.
+    - tag: GitHub UI
+      text: Review a CodeQL alert, assign, and track resolution.
+  - name: Enable CodeQL code scanning
+    steps:
+    - tag: GitHub UI
+      text: Open the Security tab and click `Set up code scanning`.
+    - tag: GitHub UI
+      text: Use the CodeQL analysis template to create a workflow.
+    - tag: GitHub UI
+      text: Commit the generated workflow and run it to produce alerts.
+- name: Copilot and AI Tools
+  level: Intermediate
+  prerequisites:
+  - Pull Requests and Reviews
+  tasks:
+  - name: Enable GitHub Copilot and accept/reject suggestions
+    steps:
+    - tag: GitHub UI
+      text: Ensure Copilot subscription is active for your account/org.
+    - tag: Editor
+      text: Install Copilot extension (VS Code/JetBrains) and sign in.
+    - tag: Editor
+      text: Open a file and start coding; accept suggestions with the editor shortcut.
+    - tag: Editor
+      text: Use inline chat or chat panel to request tests or refactors.
+  - name: Use Copilot to generate tests and review diffs
+    steps:
+    - tag: Editor
+      text: Open a file with functions; ask Copilot to generate unit tests.
+    - tag: Editor
+      text: Review suggestions, accept selectively, and run tests.
+    - tag: GitHub UI
+      text: Push changes and review diff of generated tests in PR.
+- name: Dependabot Setup
+  level: Intermediate
+  prerequisites:
+  - GitHub Actions Fundamentals
+  tasks:
+  - name: Enable Dependabot updates
+    steps:
+    - tag: Editor
+      text: Create `.github/dependabot.yml` with update rules (package-ecosystem, directory, schedule).
+    - tag: GitHub UI
+      text: Commit the file and open the Security tab.
+    - tag: GitHub UI
+      text: Watch Dependabot PRs open automatically per schedule.
+  - name: Review and merge a Dependabot PR
+    steps:
+    - tag: GitHub UI
+      text: Review the PR changelog and check status checks.
+    - tag: GitHub UI
+      text: Merge the PR using squash/merge and monitor for regressions.
+    - tag: GitHub UI
+      text: Optionally auto-merge low-risk updates via rules.
+- name: Deployment Automation
+  level: Intermediate
+  prerequisites:
+  - Secrets Management
+  tasks:
+  - name: Deploy a React app to Vercel from GitHub Actions
+    steps:
+    - tag: Vercel UI
+      text: Create a new Vercel project and link your GitHub repository.
+    - tag: GitHub UI
+      text: Add `VERCEL_TOKEN` and `VERCEL_PROJECT_ID` as repo secrets.
+    - tag: Editor
+      text: Add a deployment job in Actions that calls Vercel CLI with secrets.
+    - tag: GitHub UI
+      text: Open a PR and verify preview deployments are created.
+  - name: Deploy a static site to GitHub Pages from Actions
+    steps:
+    - tag: Editor
+      text: Build a static site (e.g., `npm run build` to `dist/`).
+    - tag: Editor
+      text: Add an Actions job to deploy to `gh-pages` branch (e.g., `peaceiris/actions-gh-pages`).
+    - tag: GitHub UI
+      text: Enable Pages in Settings and select `gh-pages` branch.
+    - tag: Browser
+      text: Verify site is live at `https://<user>.github.io/<repo>`.
+- name: Docker and Container Registry
+  level: Intermediate
+  prerequisites:
+  - Deployment Automation
+  tasks:
+  - name: Build and push an image to ghcr.io
+    steps:
+    - tag: Terminal
+      text: 'Build image: (1).'
+    - tag: Terminal
+      text: 'Login: (2).'
+    - tag: Terminal
+      text: 'Push: (3).'
+    - tag: GitHub UI
+      text: Verify image under Packages.
+    commands:
+    - docker build -t ghcr.io/<owner>/<image>:v1 .
+    - echo $CR_PAT | docker login ghcr.io -u <user> --password-stdin
+    - docker push ghcr.io/<owner>/<image>:v1
+  - name: Pull and run an image from ghcr.io
+    steps:
+    - tag: Terminal
+      text: 'Pull: (1).'
+    - tag: Terminal
+      text: 'Run: (2).'
+    - tag: Terminal
+      text: Inspect logs and exit code.
+    commands:
+    - docker pull ghcr.io/<owner>/<image>:v1
+    - docker run --rm ghcr.io/<owner>/<image>:v1
+- name: Forking and Open Source Contributions
+  level: Intermediate
+  prerequisites:
+  - Pull Requests and Reviews
+  tasks:
+  - name: Create a branch and open a PR from the fork
+    steps:
+    - tag: Terminal
+      text: 'Create a branch: (1).'
+    - tag: Editor
+      text: Implement the change and commit it.
+    - tag: Terminal
+      text: 'Push to your fork: (2).'
+    - tag: GitHub UI
+      text: Open a PR from your fork to the upstream repository.
+    - tag: GitHub UI
+      text: Follow contribution guidelines and request review.
+    commands:
+    - git checkout -b fix/<issue-id>
+    - git push -u origin fix/<issue-id>
+  - name: Fork a repository and clone your fork
+    steps:
+    - tag: GitHub UI
+      text: Open the upstream repository and click `Fork`.
+    - tag: GitHub UI
+      text: Choose your account/org and create the fork.
+    - tag: Terminal
+      text: 'Clone your fork: (1) and (2).'
+    - tag: Terminal
+      text: 'Add upstream remote: (3).'
+    - tag: Terminal
+      text: 'Verify remotes: (4).'
+    commands:
+    - git clone <your_fork_url>
+    - cd <repo>
+    - git remote add upstream <upstream_url>
+    - git remote -v
+  - name: Sync your fork with upstream
+    steps:
+    - tag: Terminal
+      text: 'Fetch upstream: (1).'
+    - tag: Terminal
+      text: "Rebase your fork's main onto upstream/main: (2) then (3)."
+    - tag: Terminal
+      text: 'Push updated main to your fork: (4).'
+    - tag: GitHub UI
+      text: Confirm your fork is up to date.
+    commands:
+    - git fetch upstream
+    - git checkout main
+    - git rebase upstream/main
+    - git push origin main
+- name: GitHub Actions Fundamentals
+  level: Intermediate
+  prerequisites:
+  - Pull Requests and Reviews
+  tasks:
+  - name: Add a status badge to the README
+    steps:
+    - tag: GitHub UI
+      text: Open the Actions tab and select your workflow.
+    - tag: GitHub UI
+      text: Copy the status badge markdown snippet.
+    - tag: Editor
+      text: Paste the badge into `README.md` and commit.
+    - tag: GitHub UI
+      text: Verify the badge reflects current run status.
+  - name: Create a workflow to run tests on every PR
+    steps:
+    - tag: Editor
+      text: Create `.github/workflows/ci.yml`.
+    - tag: Editor
+      text: 'Define `on: [push, pull_request]`.'
+    - tag: Editor
+      text: Add steps to install dependencies, run lints and tests.
+    - tag: GitHub UI
+      text: Open a PR and verify the workflow runs and reports status.
+- name: GitHub Packages
+  level: Intermediate
+  prerequisites:
+  - Git Basics
+  tasks:
+  - name: Install and use a package from GitHub Packages
+    steps:
+    - tag: Terminal
+      text: In a separate project, configure `.npmrc` to use GitHub Packages registry.
+    - tag: Terminal
+      text: Run (1).
+    - tag: Editor
+      text: Import and use the package in code; verify it works.
+    commands:
+    - npm install @OWNER/<package>@<version>
+  - name: Publish an npm package to GitHub Packages
+    steps:
+    - tag: Editor
+      text: Create or update `package.json` with `name`, `version`, `publishConfig`.
+    - tag: GitHub UI
+      text: Create a PAT with `packages:write` scope and add as secret if using Actions.
+    - tag: Terminal
+      text: Login to GitHub Packages registry (npm or yarn config).
+    - tag: Terminal
+      text: Run (1) (scoped to `@OWNER`) and verify in GitHub Packages.
+    commands:
+    - npm publish
+- name: Matrix Builds
+  level: Intermediate
+  prerequisites:
+  - GitHub Actions Fundamentals
+  tasks:
+  - name: Configure a matrix build for multiple Node.js versions
+    steps:
+    - tag: Editor
+      text: 'In the workflow, define `strategy.matrix.node-version: [18, 20, 22]`.'
+    - tag: Editor
+      text: Use `actions/setup-node` with `${{ matrix.node-version }}`.
+    - tag: GitHub UI
+      text: Trigger the workflow and observe parallel job executions.
+- name: Rebasing and History Rewrites
+  level: Intermediate
+  prerequisites:
+  - Branching and Merging
+  tasks:
+  - name: Rebase a feature branch onto main
+    steps:
+    - tag: Terminal
+      text: 'Update main: (1) then (2).'
+    - tag: Terminal
+      text: 'Switch to your feature branch: (3).'
+    - tag: Terminal
+      text: 'Rebase onto main: (4).'
+    - tag: Terminal
+      text: Resolve conflicts as they appear, (5) then (6).
+    - tag: Terminal
+      text: 'Force-push updated branch: (7).'
+    - tag: GitHub UI
+      text: Confirm the PR now has a linear history.
+    commands:
+    - git checkout main
+    - git pull
+    - git checkout feature/<name>
+    - git rebase main
+    - git add <file>
+    - git rebase --continue
+    - git push --force-with-lease
+  - name: Reword a previous commit message
+    steps:
+    - tag: Terminal
+      text: Run (1) to identify the commit.
+    - tag: Terminal
+      text: 'Start interactive rebase: (2) (adjust depth).'
+    - tag: Editor
+      text: Change `pick` to `reword` for the target commit, save and exit.
+    - tag: Editor
+      text: Enter the new commit message when prompted and save.
+    - tag: Terminal
+      text: If the commit is pushed already, run (3).
+    - tag: GitHub UI
+      text: Verify updated commit message in the PR or commits view.
+    commands:
+    - git log --oneline -n 5
+    - git rebase -i HEAD~5
+    - git push --force-with-lease
+  - name: Squash commits with interactive rebase
+    steps:
+    - tag: Terminal
+      text: 'Ensure your feature branch is current: (1).'
+    - tag: Terminal
+      text: 'Start interactive rebase: (2) where N is number of commits.'
+    - tag: Editor
+      text: Mark commits to `squash` or `fixup` as needed and save the rebase todo file.
+    - tag: Editor
+      text: Edit the combined commit message when prompted and save.
+    - tag: Terminal
+      text: 'Force-push the rewritten branch: (3).'
+    - tag: GitHub UI
+      text: Verify the PR reflects the squashed commit history.
+    commands:
+    - git fetch --all
+    - git rebase -i HEAD~<N>
+    - git push --force-with-lease
+- name: Reusable Workflows
+  level: Intermediate
+  prerequisites:
+  - GitHub Actions Fundamentals
+  tasks:
+  - name: Call a reusable workflow from another workflow
+    steps:
+    - tag: Editor
+      text: 'In another workflow, call the reusable workflow using `uses: ./.github/workflows/reusable.yml`.'
+    - tag: Editor
+      text: Pass required inputs and secrets.
+    - tag: GitHub UI
+      text: Run the workflow and confirm called jobs execute.
+  - name: Create a reusable workflow
+    steps:
+    - tag: Editor
+      text: 'Create `.github/workflows/reusable.yml` with `on: workflow_call`.'
+    - tag: Editor
+      text: Define inputs/outputs and common jobs (e.g., setup, test).
+    - tag: GitHub UI
+      text: Commit and verify syntax in the Actions tab.
+- name: Secrets Management
+  level: Intermediate
+  prerequisites:
+  - GitHub Actions Fundamentals
+  tasks:
+  - name: Add a repository secret in GitHub
+    steps:
+    - tag: GitHub UI
+      text: Go to Settings > Secrets and variables > Actions > New repository secret.
+    - tag: GitHub UI
+      text: Enter the name (e.g., `VERCEL_TOKEN`) and value, then save.
+    - tag: GitHub UI
+      text: Optionally set environment-specific secrets.
+  - name: Use a secret securely in GitHub Actions
+    steps:
+    - tag: Editor
+      text: 'Reference the secret in a workflow step: `${{ secrets.VERCEL_TOKEN }}`.'
+    - tag: Editor
+      text: Ensure secret is only used in secure contexts and not echoed.
+    - tag: GitHub UI
+      text: Run the workflow and confirm deployment/auth succeeds.

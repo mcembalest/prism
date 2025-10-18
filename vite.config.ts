@@ -30,6 +30,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         fullscreen: path.resolve(__dirname, 'fullscreen.html'),
+        skillgraph: path.resolve(__dirname, 'skillgraph.html'),
       },
     },
   }

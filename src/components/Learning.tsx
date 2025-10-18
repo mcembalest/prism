@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { BookOpen, GraduationCap, Terminal, ArrowLeft, Check, Circle, CheckCircle2, Code } from 'lucide-react'
+import { BookOpen, GraduationCap, Terminal, ArrowLeft, Check, Circle, CheckCircle2, Code, BookOpenCheck } from 'lucide-react'
+import { invoke } from '@tauri-apps/api/core'
 
 // Mock data types
 interface Step {
@@ -314,6 +315,14 @@ export function Learning() {
         }
     }
 
+    const handleOpenSkillGraph = async () => {
+        try {
+            await invoke('open_skill_graph_viewer')
+        } catch (error) {
+            console.error('Failed to open skill graph viewer:', error)
+        }
+    }
+
     // View: Course list
     if (!selectedCourse) {
         return (
@@ -323,6 +332,16 @@ export function Learning() {
                         <div className="text-center space-y-3 mb-8">
                             <h1 className="text-2xl font-bold text-white">Learn Mode</h1>
                             <p className="text-sm text-zinc-400">Interactive tutorials and courses</p>
+                        </div>
+
+                        <div className="max-w-md mx-auto mb-4">
+                            <Button
+                                onClick={handleOpenSkillGraph}
+                                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/20 rounded-xl py-6"
+                            >
+                                <BookOpenCheck className="h-5 w-5 mr-2" />
+                                <span className="text-base font-semibold">Open Skill Graph Explorer</span>
+                            </Button>
                         </div>
 
                         <div className="space-y-4 max-w-md mx-auto">
