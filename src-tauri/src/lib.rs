@@ -3,18 +3,65 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use serde::{Deserialize, Serialize};
 
-struct WindowHide<'a>(&'a tauri::Window);
 
-impl<'a> WindowHide<'a> {
-    fn new(window: &'a tauri::Window) -> Result<Self, String> {
-        window.hide().map_err(|e| e.to_string())?;
-        Ok(Self(window))
+struct WindowHide<'a> {
+    window: &'a tauri::Window,
+    original_opacity: f64,
+}
+
+#[cfg(target_os = "macos")]
+fn set_window_alpha(window: &tauri::Window, alpha: f64) -> Result<(), String> {
+    use cocoa::appkit::NSWindow;
+    use cocoa::base::id;
+    
+    unsafe {
+        let ns_window = window.ns_window().map_err(|e| e.to_string())? as id;
+        NSWindow::setAlphaValue_(ns_window, alpha);
+        Ok(())
     }
 }
 
-impl<'a> Drop for WindowHide<'a> {
-    fn drop(&mut self) {
-        let _ = self.0.show();
+#[cfg(not(target_os = "macos"))]
+fn set_window_alpha(_window: &tauri::Window, _alpha: f64) -> Result<(), String> {
+    // Opacity control not implemented for non-macOS platforms
+    Ok(())
+}
+
+impl<'a> WindowHide<'a> {
+    async fn new(window: &'a tauri::Window) -> Result<Self, String> {
+        // Store original opacity (default to 1.0)
+        let original_opacity = 1.0;
+        
+        // Smooth but fast fade out - just 2 steps for minimal blur
+        let countdown_steps = vec![0.5, 0.0];
+        let step_duration = tokio::time::Duration::from_millis(40); // 80ms total - fast but noticeable
+        
+        for opacity in countdown_steps {
+            set_window_alpha(window, opacity)?;
+            tokio::time::sleep(step_duration).await;
+        }
+        
+        // Finally hide the window completely
+        window.hide().map_err(|e| e.to_string())?;
+        
+        Ok(Self { window, original_opacity })
+    }
+    
+    async fn restore(&self) {
+        // Show window first (but it's still at 0 opacity on macOS)
+        let _ = self.window.show();
+        
+        // Smooth but fast fade back in - just 2 steps for minimal blur
+        let fadein_steps = vec![0.5, 1.0];
+        let step_duration = tokio::time::Duration::from_millis(40); // 80ms total - fast but smooth
+        
+        for opacity in fadein_steps {
+            let _ = set_window_alpha(self.window, opacity);
+            tokio::time::sleep(step_duration).await;
+        }
+        
+        // Restore original opacity
+        let _ = set_window_alpha(self.window, self.original_opacity);
     }
 }
 
@@ -51,11 +98,11 @@ struct BoundingBox {
 
 #[tauri::command]
 async fn take_screenshot(window: tauri::Window) -> Result<String, String> {
-    // Hide the window while capturing
-    let _hide = WindowHide::new(&window)?;
+    // Gradually fade out the window with countdown effect
+    let hide = WindowHide::new(&window).await?;
 
-    // Small delay to ensure window is hidden
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    // Small delay to ensure window is completely hidden and screen settles
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     let screens = Screen::all().map_err(|e| e.to_string())?;
 
@@ -75,6 +122,10 @@ async fn take_screenshot(window: tauri::Window) -> Result<String, String> {
         .map_err(|e| e.to_string())?;
 
     let base64 = STANDARD.encode(&bytes);
+    
+    // Gradually fade the window back in
+    hide.restore().await;
+    
     Ok(format!("data:image/png;base64,{}", base64))
 }
 
