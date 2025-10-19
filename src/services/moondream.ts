@@ -76,6 +76,23 @@ class MoondreamService {
       request_id: result.request_id
     }
   }
+
+  async walkthroughNextStep(
+    imageDataUrl: string,
+    goal: string,
+    _previousSteps: string[]
+  ): Promise<import('./gemini').WalkthroughStepResult> {
+    // Moondream doesn't have iterative walkthrough support
+    // Return a simple fallback response
+    const result = await this.query(imageDataUrl, `Next step to ${goal}`)
+    return {
+      instruction: result.answer,
+      points: [],
+      boxes: [],
+      isComplete: false,
+      request_id: result.request_id
+    }
+  }
 }
 
 export const moondreamService = new MoondreamService()

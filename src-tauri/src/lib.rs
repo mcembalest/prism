@@ -21,46 +21,27 @@ fn set_window_alpha(window: &tauri::Window, alpha: f64) -> Result<(), String> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-fn set_window_alpha(_window: &tauri::Window, _alpha: f64) -> Result<(), String> {
-    // Opacity control not implemented for non-macOS platforms
-    Ok(())
-}
-
 impl<'a> WindowHide<'a> {
     async fn new(window: &'a tauri::Window) -> Result<Self, String> {
-        // Store original opacity (default to 1.0)
         let original_opacity = 1.0;
-        
-        // Smooth but fast fade out - just 2 steps for minimal blur
         let countdown_steps = vec![0.5, 0.0];
-        let step_duration = tokio::time::Duration::from_millis(40); // 80ms total - fast but noticeable
-        
+        let step_duration = tokio::time::Duration::from_millis(80);
         for opacity in countdown_steps {
             set_window_alpha(window, opacity)?;
             tokio::time::sleep(step_duration).await;
-        }
-        
-        // Finally hide the window completely
+        }        
         window.hide().map_err(|e| e.to_string())?;
-        
         Ok(Self { window, original_opacity })
     }
     
     async fn restore(&self) {
-        // Show window first (but it's still at 0 opacity on macOS)
         let _ = self.window.show();
-        
-        // Smooth but fast fade back in - just 2 steps for minimal blur
         let fadein_steps = vec![0.5, 1.0];
-        let step_duration = tokio::time::Duration::from_millis(40); // 80ms total - fast but smooth
-        
+        let step_duration = tokio::time::Duration::from_millis(40);
         for opacity in fadein_steps {
             let _ = set_window_alpha(self.window, opacity);
             tokio::time::sleep(step_duration).await;
         }
-        
-        // Restore original opacity
         let _ = set_window_alpha(self.window, self.original_opacity);
     }
 }
@@ -80,6 +61,9 @@ struct OverlayPayload {
     walkthrough_steps: Option<u32>,
     #[serde(rename = "currentStep")]
     current_step: Option<u32>,
+    instruction: Option<String>,
+    #[serde(rename = "isComplete")]
+    is_complete: Option<bool>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -293,6 +277,8 @@ async fn open_screen_overlay(
     boxes: Vec<BoundingBox>,
     walkthrough_steps: Option<u32>,
     current_step: Option<u32>,
+    instruction: Option<String>,
+    is_complete: Option<bool>,
 ) -> Result<(), String> {
     use tauri::Listener;
 
@@ -363,6 +349,8 @@ async fn open_screen_overlay(
             boxes,
             walkthrough_steps,
             current_step,
+            instruction,
+            is_complete,
         };
 
         eprintln!("Sending overlay-data with {} points, {} boxes", payload.points.len(), payload.boxes.len());
@@ -379,10 +367,48 @@ async fn open_screen_overlay(
     Ok(())
 }
 
+#[tauri::command]
+async fn update_screen_overlay_data(
+    app: tauri::AppHandle,
+    points: Vec<Point>,
+    boxes: Vec<BoundingBox>,
+    walkthrough_steps: Option<u32>,
+    current_step: Option<u32>,
+    instruction: Option<String>,
+    is_complete: Option<bool>,
+) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("screen-overlay") {
+        let payload = OverlayPayload {
+            points,
+            boxes,
+            walkthrough_steps,
+            current_step,
+            instruction,
+            is_complete,
+        };
+        window.emit("overlay-data", payload)
+            .map_err(|e| format!("Failed to emit overlay-data: {:?}", e))?;
+
+        Ok(())
+    } else {
+        Err("No overlay window exists. Use open_screen_overlay first.".to_string())
+    }
+}
+
+#[tauri::command]
+async fn close_screen_overlay(app: tauri::AppHandle) -> Result<(), String> {
+    // Close overlay window if it exists
+    if let Some(window) = app.get_webview_window("screen-overlay") {
+        window.close().map_err(|e| e.to_string())?;
+        eprintln!("Closed screen overlay window");
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![take_screenshot, open_fullscreen_viewer, get_skills_data, open_skill_graph_viewer, open_settings_window, open_screen_overlay])
+    .invoke_handler(tauri::generate_handler![take_screenshot, open_fullscreen_viewer, get_skills_data, open_skill_graph_viewer, open_settings_window, open_screen_overlay, update_screen_overlay_data, close_screen_overlay])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -391,11 +417,9 @@ pub fn run() {
             .build(),
         )?;
       }
-      // App menu with Settings (best-effort; harmless on unsupported platforms)
       #[cfg(target_os = "macos")]
       {
         use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-        // Build a simple app menu with a Settings item (Cmd+,)
         let settings = MenuItemBuilder::new("Settings…")
           .id("settings")
           .accelerator("Cmd+,")

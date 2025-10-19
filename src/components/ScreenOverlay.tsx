@@ -8,10 +8,14 @@ interface OverlayData {
     boxes: BoundingBox[]
     walkthroughSteps?: number
     currentStep?: number
+    instruction?: string
+    isComplete?: boolean
 }
 
 export function ScreenOverlay() {
     const [data, setData] = useState<OverlayData | null>(null)
+    const [previousData, setPreviousData] = useState<OverlayData | null>(null)
+    const [isTransitioning, setIsTransitioning] = useState(false)
 
     useEffect(() => {
         console.log('ScreenOverlay mounted, setting up listener')
@@ -21,7 +25,28 @@ export function ScreenOverlay() {
             try {
                 const unlisten = await listen<OverlayData>('overlay-data', (event) => {
                     console.log('Received overlay-data event:', event.payload)
-                    setData(event.payload)
+                    console.log('  - Points:', event.payload.points?.length || 0)
+                    console.log('  - Boxes:', event.payload.boxes?.length || 0)
+                    console.log('  - Current step:', event.payload.currentStep)
+                    console.log('  - Instruction:', event.payload.instruction)
+
+                    // Trigger fade transition using functional setState
+                    setData(prevData => {
+                        if (prevData && prevData.currentStep !== event.payload.currentStep) {
+                            console.log('Setting previous data for transition')
+                            setPreviousData(prevData)
+                            setIsTransitioning(true)
+                            // Clear transition state after animation completes
+                            setTimeout(() => {
+                                console.log('Clearing transition state')
+                                setIsTransitioning(false)
+                                setPreviousData(null)
+                            }, 600) // Match CSS transition duration
+                        } else {
+                            console.log('First step, no transition')
+                        }
+                        return event.payload
+                    })
                 })
 
                 // Signal that we're ready to receive data
@@ -40,7 +65,7 @@ export function ScreenOverlay() {
 
         const unlistenPromise = setupListener()
 
-        // Handle ESC key to close
+        // Handle ESC key to close overlay
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 getCurrentWindow().close()
@@ -65,116 +90,112 @@ export function ScreenOverlay() {
         )
     }
 
-    // Determine if this is a walkthrough with multiple steps
+    // Determine if this is a walkthrough
     const isWalkthrough = data.walkthroughSteps && data.walkthroughSteps > 1
-    const currentStep = data.currentStep ?? 1
-
-    // Filter points and boxes based on walkthrough step (progressive reveal)
-    const visiblePoints = isWalkthrough
-        ? data.points.filter((_, idx) => idx + 1 <= currentStep)
-        : data.points
-
-    const visibleBoxes = isWalkthrough
-        ? data.boxes.filter((_, idx) => idx + 1 <= currentStep)
-        : data.boxes
-
-    // Points that are completed (before current step)
-    const completedPointCount = isWalkthrough ? Math.max(0, currentStep - 1) : 0
-    const completedBoxCount = isWalkthrough ? Math.max(0, currentStep - 1) : 0
 
     return (
         <div className="fixed inset-0 pointer-events-none">
-            {/* Render points */}
-            {visiblePoints.map((point, idx) => {
-                const globalIdx = idx
-                const isCompleted = isWalkthrough && globalIdx < completedPointCount
-                const isCurrent = isWalkthrough && globalIdx === completedPointCount
-
-                return (
-                    <div
-                        key={`point-${idx}`}
-                        className={`absolute w-6 h-6 rounded-full shadow-2xl transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ${
-                            isCurrent
-                                ? 'bg-red-500 border-3 border-white animate-pulse scale-125'
-                                : isCompleted
-                                ? 'bg-red-500 border-3 border-white opacity-40'
-                                : 'bg-red-500 border-3 border-white'
-                        }`}
-                        style={{
-                            left: `${point.x * 100}%`,
-                            top: `${point.y * 100}%`,
-                            zIndex: 9000 + (isCurrent ? 100 : 0),
-                        }}
-                    >
-                        {/* Number label */}
+            {/* Render previous step (dimmed ghost) */}
+            {previousData && (
+                <>
+                    {previousData.points.map((point, idx) => (
                         <div
-                            className={`absolute -top-10 left-1/2 transform -translate-x-1/2 bg-red-500 text-white font-bold px-3 py-2 rounded whitespace-nowrap shadow-2xl transition-all duration-300 ${
-                                isCurrent ? 'text-lg scale-110' : 'text-sm'
-                            } ${isCompleted ? 'opacity-40' : ''}`}
-                        >
-                            Step {globalIdx + 1}
-                        </div>
-
-                        {/* Outer pulsing ring for current step */}
-                        {isCurrent && (
-                            <>
-                                <div className="absolute inset-0 rounded-full border-2 border-red-400 animate-ping" style={{ animationDuration: '1.5s' }} />
-                                <div className="absolute inset-0 rounded-full border border-red-400 opacity-30" />
-                            </>
-                        )}
-                    </div>
-                )
-            })}
-
-            {/* Render boxes */}
-            {visibleBoxes.map((box, idx) => {
-                const globalIdx = idx
-                const isCompleted = isWalkthrough && globalIdx < completedBoxCount
-                const isCurrent = isWalkthrough && globalIdx === completedBoxCount
-
-                return (
-                    <div
-                        key={`box-${idx}`}
-                        className={`absolute border-4 shadow-2xl transition-all duration-300 ${
-                            isCurrent
-                                ? 'border-green-400 bg-green-400/15 scale-105'
-                                : isCompleted
-                                ? 'border-green-500 bg-green-500/5 opacity-40'
-                                : 'border-green-500 bg-green-500/10'
-                        }`}
-                        style={{
-                            left: `${box.x_min * 100}%`,
-                            top: `${box.y_min * 100}%`,
-                            width: `${(box.x_max - box.x_min) * 100}%`,
-                            height: `${(box.y_max - box.y_min) * 100}%`,
-                            zIndex: 9000 + (isCurrent ? 100 : 0),
-                        }}
-                    >
-                        {/* Label for box */}
+                            key={`prev-point-${idx}`}
+                            className="absolute w-6 h-6 rounded-full bg-red-500 border-3 border-white shadow-2xl transform -translate-x-1/2 -translate-y-1/2 transition-opacity duration-500 opacity-30"
+                            style={{
+                                left: `${point.x * 100}%`,
+                                top: `${point.y * 100}%`,
+                                zIndex: 8900,
+                            }}
+                        />
+                    ))}
+                    {previousData.boxes.map((box, idx) => (
                         <div
-                            className={`absolute -top-10 left-0 bg-green-500 text-white font-bold px-3 py-2 rounded shadow-2xl transition-all duration-300 ${
-                                isCurrent ? 'text-base scale-110' : 'text-sm'
-                            } ${isCompleted ? 'opacity-40' : ''}`}
-                        >
-                            Step {globalIdx + 1}
-                        </div>
+                            key={`prev-box-${idx}`}
+                            className="absolute border-4 border-green-500 bg-green-500/5 shadow-2xl transition-opacity duration-500 opacity-30"
+                            style={{
+                                left: `${box.x_min * 100}%`,
+                                top: `${box.y_min * 100}%`,
+                                width: `${(box.x_max - box.x_min) * 100}%`,
+                                height: `${(box.y_max - box.y_min) * 100}%`,
+                                zIndex: 8900,
+                            }}
+                        />
+                    ))}
+                </>
+            )}
 
-                        {/* Pulsing border for current step */}
-                        {isCurrent && (
-                            <div
-                                className="absolute inset-0 border-2 border-green-300 animate-pulse"
-                                style={{ animationDuration: '1.5s' }}
-                            />
-                        )}
-                    </div>
-                )
-            })}
+            {/* Render current step (highlighted with fade-in) */}
+            {data.points.map((point, idx) => (
+                <div
+                    key={`point-${idx}`}
+                    className={`absolute w-8 h-8 rounded-full bg-red-500 border-4 border-white shadow-2xl transform -translate-x-1/2 -translate-y-1/2 animate-pulse scale-110 transition-all duration-500 ${
+                        isTransitioning ? 'opacity-0' : 'opacity-100'
+                    }`}
+                    style={{
+                        left: `${point.x * 100}%`,
+                        top: `${point.y * 100}%`,
+                        zIndex: 9000,
+                        animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }}
+                >
+                    {/* Pulsing rings */}
+                    <div className="absolute inset-0 rounded-full border-2 border-red-400 animate-ping" style={{ animationDuration: '1.5s' }} />
+                    <div className="absolute inset-0 rounded-full border border-red-400 opacity-30" />
+                </div>
+            ))}
 
-            {/* Step counter in top-left for walkthroughs */}
+            {/* Render current boxes (highlighted with fade-in) */}
+            {data.boxes.map((box, idx) => (
+                <div
+                    key={`box-${idx}`}
+                    className={`absolute border-4 border-green-400 bg-green-400/15 shadow-2xl scale-105 transition-all duration-500 ${
+                        isTransitioning ? 'opacity-0' : 'opacity-100'
+                    }`}
+                    style={{
+                        left: `${box.x_min * 100}%`,
+                        top: `${box.y_min * 100}%`,
+                        width: `${(box.x_max - box.x_min) * 100}%`,
+                        height: `${(box.y_max - box.y_min) * 100}%`,
+                        zIndex: 9000,
+                    }}
+                >
+                    {/* Pulsing border */}
+                    <div
+                        className="absolute inset-0 border-2 border-green-300 animate-pulse"
+                        style={{ animationDuration: '1.5s' }}
+                    />
+                </div>
+            ))}
+
+            {/* Step counter and instruction for walkthroughs */}
             {isWalkthrough && (
-                <div className="fixed top-8 left-8 bg-black/70 backdrop-blur text-white px-6 py-4 rounded-lg shadow-2xl font-semibold text-lg pointer-events-auto border-2 border-purple-500/50">
-                    <div className="text-purple-300">Step {currentStep} of {data.walkthroughSteps}</div>
-                    <div className="text-xs text-gray-400 mt-1">Press ESC to close</div>
+                <div className={`fixed top-8 left-8 bg-black/80 backdrop-blur text-white px-6 py-4 rounded-lg shadow-2xl pointer-events-auto border-2 max-w-md transition-all duration-500 ${
+                    data.isComplete ? 'border-green-500/70 bg-green-900/40' : 'border-purple-500/50'
+                }`}>
+                    <div className="flex items-center justify-between mb-2">
+                        {data.isComplete ? (
+                            <div className="flex items-center gap-2 text-green-400 font-bold text-xl animate-pulse">
+                                <span className="text-3xl">✓</span>
+                                <span>Walkthrough Complete!</span>
+                            </div>
+                        ) : (
+                            <div className="text-purple-300 font-semibold text-lg">
+                                Step {data.currentStep} of {data.walkthroughSteps}
+                            </div>
+                        )}
+                    </div>
+                    {data.instruction && (
+                        <div className="text-white text-base mb-3 leading-relaxed">
+                            {data.instruction}
+                        </div>
+                    )}
+                    <div className="text-xs text-gray-400 space-y-1">
+                        {!data.isComplete && (
+                            <div>Click "Proceed" in the chat to continue</div>
+                        )}
+                        <div>ESC to close</div>
+                    </div>
                 </div>
             )}
 

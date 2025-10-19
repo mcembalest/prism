@@ -26,6 +26,8 @@
     "allow-get-skills-data",
     "allow-open-skill-graph-viewer",
     "allow-open-settings-window",
-    "allow-open-screen-overlay"
+    "allow-open-screen-overlay",
+    "allow-update-screen-overlay-data",
+    "allow-close-screen-overlay"
   ]
 }

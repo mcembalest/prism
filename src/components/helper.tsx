@@ -15,6 +15,22 @@ interface Message {
     boxes?: BoundingBox[]
 }
 
+interface WalkthroughStep {
+    stepNumber: number
+    screenshot: string
+    instruction: string
+    points: Point[]
+    boxes: BoundingBox[]
+}
+
+interface WalkthroughSession {
+    goal: string
+    steps: WalkthroughStep[]
+    currentStepIndex: number
+    isActive: boolean
+    isComplete: boolean
+}
+
 interface RustPoint {
     x: number
     y: number
@@ -32,14 +48,23 @@ export function Helper() {
     const [input, setInput] = useState('')
     const [isProcessing, setIsProcessing] = useState(false)
     const [statusMessage, setStatusMessage] = useState<string>('')
+    const [walkthroughSession, setWalkthroughSession] = useState<WalkthroughSession | null>(null)
+    const walkthroughSessionRef = useRef<WalkthroughSession | null>(null)
+    const overlayWindowExistsRef = useRef<boolean>(false)
     const scrollRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
+
+    // Keep ref in sync with state
+    useEffect(() => {
+        walkthroughSessionRef.current = walkthroughSession
+    }, [walkthroughSession])
 
     useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight
         }
     }, [messages])
+
 
     const openFullscreenViewer = async (imageUrl: string, points: Point[] = [], boxes: BoundingBox[] = []) => {
         try {
@@ -66,10 +91,12 @@ export function Helper() {
         points: Point[] = [],
         boxes: BoundingBox[] = [],
         walkthroughSteps?: number,
-        currentStep?: number
+        currentStep?: number,
+        instruction?: string,
+        isComplete?: boolean
     ) => {
         try {
-            console.log('openScreenOverlay called with:', { points, boxes, walkthroughSteps, currentStep })
+            console.log('openScreenOverlay called with:', { points, boxes, walkthroughSteps, currentStep, instruction, isComplete })
             // Convert Point[] to RustPoint[] format
             const rustPoints: RustPoint[] = points.map(p => ({ x: p.x, y: p.y }))
             // Convert BoundingBox[] to RustBoundingBox[] format
@@ -84,11 +111,143 @@ export function Helper() {
                 points: rustPoints,
                 boxes: rustBoxes,
                 walkthrough_steps: walkthroughSteps,
-                current_step: currentStep
+                current_step: currentStep,
+                instruction: instruction,
+                is_complete: isComplete
             })
             console.log('open_screen_overlay command returned:', result)
         } catch (error) {
             console.error('Failed to open screen overlay:', error)
+        }
+    }
+
+    const handleProceedToNextStep = async () => {
+        const session = walkthroughSession
+        if (!session || session.isComplete || isProcessing) {
+            console.log('Cannot proceed: no session, complete, or already processing')
+            return
+        }
+
+        try {
+            setIsProcessing(true)
+            setStatusMessage('Preparing for next step...')
+
+            // Close the overlay before taking screenshot so it doesn't appear in the image
+            console.log('Closing overlay before screenshot')
+            await invoke('close_screen_overlay')
+            overlayWindowExistsRef.current = false
+
+            // Small delay to ensure overlay is fully closed
+            await new Promise(resolve => setTimeout(resolve, 100))
+
+            setStatusMessage('Taking screenshot for next step...')
+            const screenshotDataUrl = await invoke<string>('take_screenshot')
+            setStatusMessage('Determining next step...')
+
+            const previousSteps = session.steps.map(s => s.instruction)
+            const stepResult = await visionService.walkthroughNextStep(
+                screenshotDataUrl,
+                session.goal,
+                previousSteps
+            )
+
+            const newStep: WalkthroughStep = {
+                stepNumber: session.steps.length + 1,
+                screenshot: screenshotDataUrl,
+                instruction: stepResult.instruction,
+                points: stepResult.points,
+                boxes: stepResult.boxes
+            }
+
+            const updatedSession: WalkthroughSession = {
+                ...session,
+                steps: [...session.steps, newStep],
+                currentStepIndex: session.steps.length,
+                isComplete: stepResult.isComplete
+            }
+
+            setWalkthroughSession(updatedSession)
+            await updateOverlayWithSession(updatedSession)
+
+            const assistantMessage: Message = {
+                id: Date.now().toString(),
+                role: 'assistant',
+                content: `Step ${newStep.stepNumber}: ${newStep.instruction}`,
+                image: screenshotDataUrl,
+                points: newStep.points,
+                boxes: newStep.boxes
+            }
+            setMessages(prev => [...prev, assistantMessage])
+        } catch (error) {
+            console.error('Error getting next step:', error)
+            setStatusMessage(`Error: ${error}`)
+        } finally {
+            setIsProcessing(false)
+            setStatusMessage('')
+        }
+    }
+
+    const updateOverlayWithSession = async (session: WalkthroughSession) => {
+        const currentStep = session.steps[session.currentStepIndex]
+        if (!currentStep) {
+            console.log('No current step, returning')
+            return
+        }
+
+        console.log('updateOverlayWithSession called', {
+            currentStepIndex: session.currentStepIndex,
+            totalSteps: session.steps.length,
+            pointsCount: currentStep.points.length,
+            boxesCount: currentStep.boxes.length,
+            overlayExists: overlayWindowExistsRef.current
+        })
+
+        try {
+            if (overlayWindowExistsRef.current) {
+                // Update existing overlay window with only current step data
+                console.log('Updating existing overlay window via update_screen_overlay_data')
+                const rustPoints: RustPoint[] = currentStep.points.map(p => ({ x: p.x, y: p.y }))
+                const rustBoxes: RustBoundingBox[] = currentStep.boxes.map(b => ({
+                    x_min: b.x_min,
+                    y_min: b.y_min,
+                    x_max: b.x_max,
+                    y_max: b.y_max
+                }))
+
+                console.log('Sending to overlay:', {
+                    points: rustPoints,
+                    boxes: rustBoxes,
+                    currentStep: session.currentStepIndex + 1,
+                    instruction: currentStep.instruction
+                })
+
+                await invoke('update_screen_overlay_data', {
+                    points: rustPoints,
+                    boxes: rustBoxes,
+                    walkthrough_steps: session.steps.length,
+                    current_step: session.currentStepIndex + 1,
+                    instruction: currentStep.instruction,
+                    is_complete: session.isComplete
+                })
+                console.log('✓ Overlay updated successfully')
+            } else {
+                // Create new overlay window for first step
+                console.log('Creating new overlay window')
+                await openScreenOverlay(
+                    currentStep.points,
+                    currentStep.boxes,
+                    session.steps.length,
+                    session.currentStepIndex + 1,
+                    currentStep.instruction,
+                    session.isComplete
+                )
+                overlayWindowExistsRef.current = true
+            }
+        } catch (error) {
+            console.error('Error updating overlay:', error)
+            // If update fails, the window might be closed - try recreating
+            console.log('Update failed, will recreate on next step if needed')
+            overlayWindowExistsRef.current = false
         }
     }
 
@@ -175,29 +334,60 @@ export function Helper() {
                     detectResult.objects.length
                 )
             } else if (intent === 'walkthrough') {
-                // Take screenshot only when needed
+                // Initialize iterative walkthrough session
                 setStatusMessage('📸')
                 const screenshotDataUrl = await invoke<string>('take_screenshot')
 
-                setStatusMessage(`Creating walkthrough for "${query}"...`)
-                const walkthroughResult = await visionService.walkthrough(screenshotDataUrl, query)
+                setStatusMessage(`Starting walkthrough for "${query}"...`)
 
+                // Get the first step
+                const stepResult = await visionService.walkthroughNextStep(
+                    screenshotDataUrl,
+                    query,
+                    [] // No previous steps yet
+                )
+
+                // Create the first step
+                const firstStep: WalkthroughStep = {
+                    stepNumber: 1,
+                    screenshot: screenshotDataUrl,
+                    instruction: stepResult.instruction,
+                    points: stepResult.points,
+                    boxes: stepResult.boxes
+                }
+
+                // Initialize session
+                const newSession: WalkthroughSession = {
+                    goal: query,
+                    steps: [firstStep],
+                    currentStepIndex: 0,
+                    isActive: true,
+                    isComplete: stepResult.isComplete
+                }
+
+                setWalkthroughSession(newSession)
+
+                // Add to messages
                 const assistantMessage: Message = {
                     id: Date.now().toString(),
                     role: 'assistant',
-                    content: walkthroughResult.narrative,
+                    content: `Step 1: ${firstStep.instruction}`,
                     image: screenshotDataUrl,
-                    points: walkthroughResult.points
+                    points: firstStep.points,
+                    boxes: firstStep.boxes
                 }
                 setMessages(prev => [...prev, assistantMessage])
 
                 // Show overlay on screen
                 await openScreenOverlay(
-                    walkthroughResult.points,
-                    [],
-                    walkthroughResult.points.length,
-                    walkthroughResult.points.length
+                    firstStep.points,
+                    firstStep.boxes,
+                    1,
+                    1,
+                    firstStep.instruction,
+                    stepResult.isComplete
                 )
+                overlayWindowExistsRef.current = true
             } else {
                 // 'query' intent - needs screenshot to answer questions about the screen
                 setStatusMessage('📸')
@@ -238,18 +428,27 @@ export function Helper() {
             <div className="flex-1 overflow-hidden">
                 <ScrollArea className="h-full">
                     <div ref={scrollRef} className="p-4 space-y-3">
-                        {messages.map((message, index) => (
-                            <div
-                                key={message.id}
-                                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}
-                                style={{ animationDelay: `${index * 50}ms` }}
-                            >
-                                <div
-                                    className={`max-w-[85%] rounded-2xl p-3.5 shadow-lg ${message.role === 'user'
-                                            ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white'
-                                            : 'bg-zinc-800/80 text-gray-100 border border-zinc-700/50'
-                                        }`}
-                                >
+                        {messages.map((message, index) => {
+                            const isLastMessage = index === messages.length - 1
+                            if (isLastMessage) {
+                                console.log('Last message - should show button?', {
+                                    hasSession: !!walkthroughSession,
+                                    isComplete: walkthroughSession?.isComplete,
+                                    shouldShow: !!walkthroughSession && !walkthroughSession.isComplete
+                                })
+                            }
+                            return (
+                                <div key={message.id}>
+                                    <div
+                                        className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}
+                                        style={{ animationDelay: `${index * 50}ms` }}
+                                    >
+                                        <div
+                                            className={`max-w-[85%] rounded-2xl p-3.5 shadow-lg ${message.role === 'user'
+                                                    ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white'
+                                                    : 'bg-zinc-800/80 text-gray-100 border border-zinc-700/50'
+                                                }`}
+                                        >
                                     <p className="text-sm leading-relaxed">{message.content}</p>
                                     {message.image && (
                                         <div
@@ -300,7 +499,22 @@ export function Helper() {
                                     )}
                                 </div>
                             </div>
-                        ))}
+
+                            {/* Proceed button for walkthrough - shown below last message */}
+                            {isLastMessage && walkthroughSession && !walkthroughSession.isComplete && (
+                                <div className="flex justify-start mt-2 ml-1">
+                                    <button
+                                        onClick={handleProceedToNextStep}
+                                        disabled={isProcessing}
+                                        className="text-sm text-purple-400 hover:text-purple-300 underline decoration-2 underline-offset-4 disabled:opacity-50 disabled:cursor-not-allowed transition-colors bg-purple-500/10 hover:bg-purple-500/20 px-2 py-1 rounded"
+                                    >
+                                        {isProcessing ? 'Processing...' : 'Proceed →'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )
+                        })}
                     </div>
                 </ScrollArea>
             </div>

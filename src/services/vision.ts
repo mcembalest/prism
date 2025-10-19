@@ -1,4 +1,4 @@
-import { moondreamService as md } from '@/services/moondream'
+// import { moondreamService as md } from '@/services/moondream'
 import { geminiService as gm } from '@/services/gemini'
 
 export interface Point {
@@ -34,11 +34,24 @@ export interface WalkthroughResult {
   request_id?: string
 }
 
+export interface WalkthroughStepResult {
+  instruction: string
+  points: Point[]
+  boxes: BoundingBox[]
+  isComplete: boolean
+  request_id?: string
+}
+
 type Service = {
   query(imageDataUrl: string, question: string): Promise<QueryResult>
   point(imageDataUrl: string, object: string): Promise<PointResult>
   detect(imageDataUrl: string, object: string): Promise<DetectResult>
   walkthrough(imageDataUrl: string, question: string): Promise<WalkthroughResult>
+  walkthroughNextStep(
+    imageDataUrl: string,
+    goal: string,
+    previousSteps: string[]
+  ): Promise<WalkthroughStepResult>
 }
 
 // Use Gemini by default and manage keys via Settings (localStorage).

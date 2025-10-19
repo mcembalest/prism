@@ -6,7 +6,9 @@ permissions = [
   "allow-get-skills-data",
   "allow-open-skill-graph-viewer",
   "allow-open-settings-window",
-  "allow-open-screen-overlay"
+  "allow-open-screen-overlay",
+  "allow-update-screen-overlay-data",
+  "allow-close-screen-overlay"
 ]
 
 [[permission]]
@@ -55,4 +57,20 @@ description = "Allows the open_screen_overlay command"
 
 [permission.commands]
 allow = ["open_screen_overlay"]
+deny = []
+
+[[permission]]
+identifier = "allow-update-screen-overlay-data"
+description = "Allows the update_screen_overlay_data command"
+
+[permission.commands]
+allow = ["update_screen_overlay_data"]
+deny = []
+
+[[permission]]
+identifier = "allow-close-screen-overlay"
+description = "Allows the close_screen_overlay command"
+
+[permission.commands]
+allow = ["close_screen_overlay"]
 deny = []

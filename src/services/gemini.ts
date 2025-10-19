@@ -33,6 +33,14 @@ export interface WalkthroughResult {
   request_id?: string
 }
 
+export interface WalkthroughStepResult {
+  instruction: string
+  points: Point[]
+  boxes: BoundingBox[]
+  isComplete: boolean
+  request_id?: string
+}
+
 export type IntentType = 'query' | 'point' | 'detect' | 'walkthrough' | 'text-only'
 
 type GeminiPart =
@@ -279,6 +287,105 @@ class GeminiService {
     }
 
     return { points, narrative: parsed.narrative }
+  }
+
+  async walkthroughNextStep(
+    imageDataUrl: string,
+    goal: string,
+    previousSteps: string[]
+  ): Promise<WalkthroughStepResult> {
+    const inline = dataUrlToInlineData(imageDataUrl)
+
+    // Build context about previous steps
+    const contextText = previousSteps.length > 0
+      ? `Previous steps completed:\n${previousSteps.map((step, i) => `${i + 1}. ${step}`).join('\n')}\n\n`
+      : ''
+
+    const prompt = [
+      'You are helping a user achieve a goal through a step-by-step walkthrough.',
+      `User\'s goal: ${goal}`,
+      '',
+      contextText,
+      'Analyze the current screen and determine the NEXT action the user should take.',
+      '',
+      'If the goal has been achieved, set "isComplete" to true and provide a completion message.',
+      'If more steps are needed, identify the UI element to interact with and provide clear instruction.',
+      '',
+      'Return JSON with these fields:',
+      '1. "instruction": Clear, concise instruction for this step (e.g., "Click the File menu in the top-left corner")',
+      '2. "points": array of center points to highlight, each as {x, y} normalized 0.0-1.0 (use points for clickable elements)',
+      '3. "boxes": array of bounding boxes to highlight, each as {x_min, y_min, x_max, y_max} normalized 0.0-1.0 (use boxes for regions/areas)',
+      '4. "isComplete": boolean - true if the goal is fully achieved, false otherwise',
+      '',
+      'Example for next step:',
+      '{"instruction": "Click the File menu in the top-left corner", "points": [{"x": 0.05, "y": 0.03}], "boxes": [], "isComplete": false}',
+      '',
+      'Example for completion:',
+      '{"instruction": "Walkthrough complete! The file has been saved successfully.", "points": [], "boxes": [], "isComplete": true}',
+      '',
+      'Do not include markdown fences or extra text.',
+    ].join('\n')
+
+    const resp = await callGemini([
+      { inline_data: inline },
+      { text: prompt },
+    ], { responseJson: true })
+
+    const jsonText = extractFirstText(resp)
+    const parsed = safeParseJson<{
+      instruction?: string
+      points?: Array<{ x?: number; y?: number }>
+      boxes?: Array<{ x_min?: number; y_min?: number; x_max?: number; y_max?: number }>
+      isComplete?: boolean
+    }>(jsonText)
+
+    if (!parsed || !parsed.instruction) {
+      return {
+        instruction: 'Unable to determine the next step.',
+        points: [],
+        boxes: [],
+        isComplete: false
+      }
+    }
+
+    // Process points
+    const points: Point[] = []
+    if (parsed.points && Array.isArray(parsed.points)) {
+      for (const p of parsed.points) {
+        if (p.x !== undefined && p.y !== undefined && isFinite(p.x) && isFinite(p.y)) {
+          points.push({ x: clamp01(p.x), y: clamp01(p.y) })
+        }
+      }
+    }
+
+    // Process boxes
+    const boxes: BoundingBox[] = []
+    if (parsed.boxes && Array.isArray(parsed.boxes)) {
+      for (const b of parsed.boxes) {
+        if (
+          b.x_min !== undefined &&
+          b.y_min !== undefined &&
+          b.x_max !== undefined &&
+          b.y_max !== undefined &&
+          b.x_max > b.x_min &&
+          b.y_max > b.y_min
+        ) {
+          boxes.push({
+            x_min: clamp01(b.x_min),
+            y_min: clamp01(b.y_min),
+            x_max: clamp01(b.x_max),
+            y_max: clamp01(b.y_max)
+          })
+        }
+      }
+    }
+
+    return {
+      instruction: parsed.instruction,
+      points,
+      boxes,
+      isComplete: parsed.isComplete ?? false
+    }
   }
 }
 
