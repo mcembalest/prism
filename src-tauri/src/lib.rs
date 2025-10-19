@@ -24,8 +24,8 @@ fn set_window_alpha(window: &tauri::Window, alpha: f64) -> Result<(), String> {
 impl<'a> WindowHide<'a> {
     async fn new(window: &'a tauri::Window) -> Result<Self, String> {
         let original_opacity = 1.0;
-        let countdown_steps = vec![0.5, 0.0];
-        let step_duration = tokio::time::Duration::from_millis(80);
+        let countdown_steps = vec![0.5, 0.25, 0.0];
+        let step_duration = tokio::time::Duration::from_millis(25);
         for opacity in countdown_steps {
             set_window_alpha(window, opacity)?;
             tokio::time::sleep(step_duration).await;
