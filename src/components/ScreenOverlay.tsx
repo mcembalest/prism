@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { listen } from '@tauri-apps/api/event'
-import { Point, BoundingBox } from '@/services/vision'
+import type { Point, BoundingBox } from '@/types/walkthrough'
 
 interface OverlayData {
     points: Point[]
@@ -9,52 +9,96 @@ interface OverlayData {
     walkthroughSteps?: number
     currentStep?: number
     instruction?: string
+    caption?: string
     isComplete?: boolean
+}
+
+// Reusable component for rendering overlay points
+function OverlayPoint({ point, index, isPrevious, caption }: { point: Point; index: number; isPrevious?: boolean; caption?: string }) {
+    const baseClasses = "absolute rounded-full bg-red-500 border-white shadow-2xl transform -translate-x-1/2 -translate-y-1/2"
+    const sizeClasses = isPrevious ? "w-6 h-6 border-3" : "w-8 h-8 border-4 animate-pulse scale-110"
+    const opacityClass = isPrevious ? "opacity-30" : "opacity-100 transition-all duration-500"
+
+    return (
+        <div
+            key={`${isPrevious ? 'prev-' : ''}point-${index}`}
+            className={`${baseClasses} ${sizeClasses} ${opacityClass}`}
+            style={{
+                left: `${point.x * 100}%`,
+                top: `${point.y * 100}%`,
+                zIndex: isPrevious ? 8900 : 9000,
+                animation: isPrevious ? 'none' : 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            }}
+        >
+            {!isPrevious && (
+                <>
+                    <div className="absolute inset-0 rounded-full border-2 border-red-400 animate-ping" style={{ animationDuration: '1.5s' }} />
+                    <div className="absolute inset-0 rounded-full border border-red-400 opacity-30" />
+                    {caption && (
+                        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-sm px-3 py-1 rounded shadow-lg whitespace-nowrap font-medium">
+                            {caption}
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    )
+}
+
+// Reusable component for rendering overlay boxes
+function OverlayBox({ box, index, isPrevious, caption }: { box: BoundingBox; index: number; isPrevious?: boolean; caption?: string }) {
+    const baseClasses = "absolute border-green-500 shadow-2xl"
+    const sizeClasses = isPrevious ? "border-4 bg-green-500/5" : "border-4 bg-green-400/15 scale-105"
+    const opacityClass = isPrevious ? "opacity-30" : "opacity-100 transition-all duration-500"
+
+    return (
+        <div
+            key={`${isPrevious ? 'prev-' : ''}box-${index}`}
+            className={`${baseClasses} ${sizeClasses} ${opacityClass}`}
+            style={{
+                left: `${box.xMin * 100}%`,
+                top: `${box.yMin * 100}%`,
+                width: `${(box.xMax - box.xMin) * 100}%`,
+                height: `${(box.yMax - box.yMin) * 100}%`,
+                zIndex: isPrevious ? 8900 : 9000,
+            }}
+        >
+            {!isPrevious && (
+                <>
+                    <div className="absolute inset-0 border-2 border-green-300 animate-pulse" style={{ animationDuration: '1.5s' }} />
+                    {caption && (
+                        <div className="absolute -top-8 left-0 bg-green-500 text-white text-sm px-3 py-1 rounded shadow-lg whitespace-nowrap font-medium">
+                            {caption}
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    )
 }
 
 export function ScreenOverlay() {
     const [data, setData] = useState<OverlayData | null>(null)
     const [previousData, setPreviousData] = useState<OverlayData | null>(null)
-    const [isTransitioning, setIsTransitioning] = useState(false)
 
     useEffect(() => {
-        console.log('ScreenOverlay mounted, setting up listener')
-
         // Listen for the overlay data
         const setupListener = async () => {
             try {
                 const unlisten = await listen<OverlayData>('overlay-data', (event) => {
-                    console.log('Received overlay-data event:', event.payload)
-                    console.log('  - Points:', event.payload.points?.length || 0)
-                    console.log('  - Boxes:', event.payload.boxes?.length || 0)
-                    console.log('  - Current step:', event.payload.currentStep)
-                    console.log('  - Instruction:', event.payload.instruction)
-
-                    // Trigger fade transition using functional setState
                     setData(prevData => {
+                        // Show previous step briefly for transition effect
                         if (prevData && prevData.currentStep !== event.payload.currentStep) {
-                            console.log('Setting previous data for transition')
                             setPreviousData(prevData)
-                            setIsTransitioning(true)
-                            // Clear transition state after animation completes
-                            setTimeout(() => {
-                                console.log('Clearing transition state')
-                                setIsTransitioning(false)
-                                setPreviousData(null)
-                            }, 600) // Match CSS transition duration
-                        } else {
-                            console.log('First step, no transition')
+                            setTimeout(() => setPreviousData(null), 600)
                         }
                         return event.payload
                     })
                 })
 
                 // Signal that we're ready to receive data
-                console.log('Emitting overlay-ready event')
                 const window = getCurrentWindow()
-                console.log('Current window:', window)
                 await window.emit('overlay-ready', {})
-                console.log('overlay-ready event emitted')
 
                 return unlisten
             } catch (error) {
@@ -81,13 +125,7 @@ export function ScreenOverlay() {
     }, [])
 
     if (!data) {
-        return (
-            <div className="fixed inset-0 pointer-events-none">
-                <div className="fixed bottom-4 left-4 text-red-400 text-xs bg-black/50 px-3 py-2 rounded font-mono">
-                    Waiting for overlay data...
-                </div>
-            </div>
-        )
+        return null // Wait for data to arrive
     }
 
     // Determine if this is a walkthrough
@@ -99,73 +137,21 @@ export function ScreenOverlay() {
             {previousData && (
                 <>
                     {previousData.points.map((point, idx) => (
-                        <div
-                            key={`prev-point-${idx}`}
-                            className="absolute w-6 h-6 rounded-full bg-red-500 border-3 border-white shadow-2xl transform -translate-x-1/2 -translate-y-1/2 transition-opacity duration-500 opacity-30"
-                            style={{
-                                left: `${point.x * 100}%`,
-                                top: `${point.y * 100}%`,
-                                zIndex: 8900,
-                            }}
-                        />
+                        <OverlayPoint key={`prev-point-${idx}`} point={point} index={idx} isPrevious />
                     ))}
                     {previousData.boxes.map((box, idx) => (
-                        <div
-                            key={`prev-box-${idx}`}
-                            className="absolute border-4 border-green-500 bg-green-500/5 shadow-2xl transition-opacity duration-500 opacity-30"
-                            style={{
-                                left: `${box.x_min * 100}%`,
-                                top: `${box.y_min * 100}%`,
-                                width: `${(box.x_max - box.x_min) * 100}%`,
-                                height: `${(box.y_max - box.y_min) * 100}%`,
-                                zIndex: 8900,
-                            }}
-                        />
+                        <OverlayBox key={`prev-box-${idx}`} box={box} index={idx} isPrevious />
                     ))}
                 </>
             )}
 
             {/* Render current step (highlighted with fade-in) */}
             {data.points.map((point, idx) => (
-                <div
-                    key={`point-${idx}`}
-                    className={`absolute w-8 h-8 rounded-full bg-red-500 border-4 border-white shadow-2xl transform -translate-x-1/2 -translate-y-1/2 animate-pulse scale-110 transition-all duration-500 ${
-                        isTransitioning ? 'opacity-0' : 'opacity-100'
-                    }`}
-                    style={{
-                        left: `${point.x * 100}%`,
-                        top: `${point.y * 100}%`,
-                        zIndex: 9000,
-                        animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    }}
-                >
-                    {/* Pulsing rings */}
-                    <div className="absolute inset-0 rounded-full border-2 border-red-400 animate-ping" style={{ animationDuration: '1.5s' }} />
-                    <div className="absolute inset-0 rounded-full border border-red-400 opacity-30" />
-                </div>
+                <OverlayPoint key={`point-${idx}`} point={point} index={idx} caption={data.caption} />
             ))}
 
-            {/* Render current boxes (highlighted with fade-in) */}
             {data.boxes.map((box, idx) => (
-                <div
-                    key={`box-${idx}`}
-                    className={`absolute border-4 border-green-400 bg-green-400/15 shadow-2xl scale-105 transition-all duration-500 ${
-                        isTransitioning ? 'opacity-0' : 'opacity-100'
-                    }`}
-                    style={{
-                        left: `${box.x_min * 100}%`,
-                        top: `${box.y_min * 100}%`,
-                        width: `${(box.x_max - box.x_min) * 100}%`,
-                        height: `${(box.y_max - box.y_min) * 100}%`,
-                        zIndex: 9000,
-                    }}
-                >
-                    {/* Pulsing border */}
-                    <div
-                        className="absolute inset-0 border-2 border-green-300 animate-pulse"
-                        style={{ animationDuration: '1.5s' }}
-                    />
-                </div>
+                <OverlayBox key={`box-${idx}`} box={box} index={idx} caption={data.caption} />
             ))}
 
             {/* Step counter and instruction for walkthroughs */}

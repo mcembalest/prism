@@ -3,45 +3,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Send } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
-import { visionService, Point, BoundingBox } from '@/services/vision'
 import { geminiService } from '@/services/gemini'
-
-interface Message {
-    id: string
-    role: 'user' | 'assistant'
-    content: string
-    image?: string
-    points?: Point[]
-    boxes?: BoundingBox[]
-}
-
-interface WalkthroughStep {
-    stepNumber: number
-    screenshot: string
-    instruction: string
-    points: Point[]
-    boxes: BoundingBox[]
-}
-
-interface WalkthroughSession {
-    goal: string
-    steps: WalkthroughStep[]
-    currentStepIndex: number
-    isActive: boolean
-    isComplete: boolean
-}
-
-interface RustPoint {
-    x: number
-    y: number
-}
-
-interface RustBoundingBox {
-    x_min: number
-    y_min: number
-    x_max: number
-    y_max: number
-}
+import type { Point, BoundingBox, Message, WalkthroughStep, WalkthroughSession } from '@/types/walkthrough'
 
 export function Helper() {
     const [messages, setMessages] = useState<Message[]>([])
@@ -49,15 +12,9 @@ export function Helper() {
     const [isProcessing, setIsProcessing] = useState(false)
     const [statusMessage, setStatusMessage] = useState<string>('')
     const [walkthroughSession, setWalkthroughSession] = useState<WalkthroughSession | null>(null)
-    const walkthroughSessionRef = useRef<WalkthroughSession | null>(null)
     const overlayWindowExistsRef = useRef<boolean>(false)
     const scrollRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
-
-    // Keep ref in sync with state
-    useEffect(() => {
-        walkthroughSessionRef.current = walkthroughSession
-    }, [walkthroughSession])
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -66,21 +23,13 @@ export function Helper() {
     }, [messages])
 
 
-    const openFullscreenViewer = async (imageUrl: string, points: Point[] = [], boxes: BoundingBox[] = []) => {
+    const openFullscreenViewer = async (imageUrl: string, points: Point[] = [], boxes: BoundingBox[] = [], caption?: string) => {
         try {
-            // Convert Point[] to RustPoint[] format
-            const rustPoints: RustPoint[] = points.map(p => ({ x: p.x, y: p.y }))
-            // Convert BoundingBox[] to RustBoundingBox[] format
-            const rustBoxes: RustBoundingBox[] = boxes.map(b => ({
-                x_min: b.x_min,
-                y_min: b.y_min,
-                x_max: b.x_max,
-                y_max: b.y_max
-            }))
             await invoke('open_fullscreen_viewer', {
                 image: imageUrl,
-                points: rustPoints,
-                boxes: rustBoxes
+                points,
+                boxes,
+                caption
             })
         } catch (error) {
             console.error('Failed to open fullscreen viewer:', error)
@@ -93,29 +42,19 @@ export function Helper() {
         walkthroughSteps?: number,
         currentStep?: number,
         instruction?: string,
+        caption?: string,
         isComplete?: boolean
     ) => {
         try {
-            console.log('openScreenOverlay called with:', { points, boxes, walkthroughSteps, currentStep, instruction, isComplete })
-            // Convert Point[] to RustPoint[] format
-            const rustPoints: RustPoint[] = points.map(p => ({ x: p.x, y: p.y }))
-            // Convert BoundingBox[] to RustBoundingBox[] format
-            const rustBoxes: RustBoundingBox[] = boxes.map(b => ({
-                x_min: b.x_min,
-                y_min: b.y_min,
-                x_max: b.x_max,
-                y_max: b.y_max
-            }))
-            console.log('Invoking open_screen_overlay command')
-            const result = await invoke('open_screen_overlay', {
-                points: rustPoints,
-                boxes: rustBoxes,
+            await invoke('open_screen_overlay', {
+                points,
+                boxes,
                 walkthrough_steps: walkthroughSteps,
                 current_step: currentStep,
-                instruction: instruction,
+                instruction,
+                caption,
                 is_complete: isComplete
             })
-            console.log('open_screen_overlay command returned:', result)
         } catch (error) {
             console.error('Failed to open screen overlay:', error)
         }
@@ -123,17 +62,13 @@ export function Helper() {
 
     const handleProceedToNextStep = async () => {
         const session = walkthroughSession
-        if (!session || session.isComplete || isProcessing) {
-            console.log('Cannot proceed: no session, complete, or already processing')
-            return
-        }
+        if (!session || session.isComplete || isProcessing) return
 
         try {
             setIsProcessing(true)
             setStatusMessage('Preparing for next step...')
 
-            // Close the overlay before taking screenshot so it doesn't appear in the image
-            console.log('Closing overlay before screenshot')
+            // Close the overlay before taking screenshot
             await invoke('close_screen_overlay')
             overlayWindowExistsRef.current = false
 
@@ -145,7 +80,7 @@ export function Helper() {
             setStatusMessage('Determining next step...')
 
             const previousSteps = session.steps.map(s => s.instruction)
-            const stepResult = await visionService.walkthroughNextStep(
+            const stepResult = await geminiService.walkthroughNextStep(
                 screenshotDataUrl,
                 session.goal,
                 previousSteps
@@ -154,6 +89,7 @@ export function Helper() {
             const newStep: WalkthroughStep = {
                 stepNumber: session.steps.length + 1,
                 screenshot: screenshotDataUrl,
+                caption: stepResult.caption,
                 instruction: stepResult.instruction,
                 points: stepResult.points,
                 boxes: stepResult.boxes
@@ -175,7 +111,8 @@ export function Helper() {
                 content: `Step ${newStep.stepNumber}: ${newStep.instruction}`,
                 image: screenshotDataUrl,
                 points: newStep.points,
-                boxes: newStep.boxes
+                boxes: newStep.boxes,
+                caption: newStep.caption
             }
             setMessages(prev => [...prev, assistantMessage])
         } catch (error) {
@@ -189,229 +126,190 @@ export function Helper() {
 
     const updateOverlayWithSession = async (session: WalkthroughSession) => {
         const currentStep = session.steps[session.currentStepIndex]
-        if (!currentStep) {
-            console.log('No current step, returning')
-            return
-        }
-
-        console.log('updateOverlayWithSession called', {
-            currentStepIndex: session.currentStepIndex,
-            totalSteps: session.steps.length,
-            pointsCount: currentStep.points.length,
-            boxesCount: currentStep.boxes.length,
-            overlayExists: overlayWindowExistsRef.current
-        })
+        if (!currentStep) return
 
         try {
             if (overlayWindowExistsRef.current) {
-                // Update existing overlay window with only current step data
-                console.log('Updating existing overlay window via update_screen_overlay_data')
-                const rustPoints: RustPoint[] = currentStep.points.map(p => ({ x: p.x, y: p.y }))
-                const rustBoxes: RustBoundingBox[] = currentStep.boxes.map(b => ({
-                    x_min: b.x_min,
-                    y_min: b.y_min,
-                    x_max: b.x_max,
-                    y_max: b.y_max
-                }))
-
-                console.log('Sending to overlay:', {
-                    points: rustPoints,
-                    boxes: rustBoxes,
-                    currentStep: session.currentStepIndex + 1,
-                    instruction: currentStep.instruction
-                })
-
+                // Update existing overlay window
                 await invoke('update_screen_overlay_data', {
-                    points: rustPoints,
-                    boxes: rustBoxes,
+                    points: currentStep.points,
+                    boxes: currentStep.boxes,
                     walkthrough_steps: session.steps.length,
                     current_step: session.currentStepIndex + 1,
                     instruction: currentStep.instruction,
+                    caption: currentStep.caption,
                     is_complete: session.isComplete
                 })
-                console.log('✓ Overlay updated successfully')
             } else {
                 // Create new overlay window for first step
-                console.log('Creating new overlay window')
                 await openScreenOverlay(
                     currentStep.points,
                     currentStep.boxes,
                     session.steps.length,
                     session.currentStepIndex + 1,
                     currentStep.instruction,
+                    currentStep.caption,
                     session.isComplete
                 )
                 overlayWindowExistsRef.current = true
             }
         } catch (error) {
             console.error('Error updating overlay:', error)
-            // If update fails, the window might be closed - try recreating
-            console.log('Update failed, will recreate on next step if needed')
             overlayWindowExistsRef.current = false
         }
+    }
+
+    // Helper to create assistant message
+    const createAssistantMessage = (
+        content: string,
+        image?: string,
+        points?: Point[],
+        boxes?: BoundingBox[],
+        caption?: string
+    ): Message => ({
+        id: Date.now().toString(),
+        role: 'assistant',
+        content,
+        image,
+        points,
+        boxes,
+        caption
+    })
+
+    // Helper to take screenshot with fade animation
+    const takeScreenshot = async (): Promise<string> => {
+        setStatusMessage('📸')
+        return await invoke<string>('take_screenshot')
+    }
+
+    // Intent Handlers
+    const handleTextOnlyIntent = async (query: string) => {
+        setStatusMessage('Answering...')
+        const result = await geminiService.answerTextOnly(query)
+        setMessages(prev => [...prev, createAssistantMessage(result.answer)])
+    }
+
+    const handlePointIntent = async (query: string) => {
+        const screenshot = await takeScreenshot()
+        setStatusMessage(`Finding "${query}"...`)
+        const result = await geminiService.point(screenshot, query)
+
+        setMessages(prev => [...prev, createAssistantMessage(
+            `Found ${result.points.length} instance(s) of "${query}"`,
+            screenshot,
+            result.points
+        )])
+
+        await openScreenOverlay(result.points, [], result.points.length, result.points.length)
+    }
+
+    const handleDetectIntent = async (query: string) => {
+        const screenshot = await takeScreenshot()
+        setStatusMessage(`Detecting "${query}"...`)
+        const result = await geminiService.detect(screenshot, query)
+
+        setMessages(prev => [...prev, createAssistantMessage(
+            `Detected ${result.objects.length} object(s) matching "${query}"`,
+            screenshot,
+            undefined,
+            result.objects
+        )])
+
+        await openScreenOverlay([], result.objects, result.objects.length, result.objects.length)
+    }
+
+    const handleQueryIntent = async (query: string) => {
+        const screenshot = await takeScreenshot()
+        setStatusMessage('Answering...')
+        const result = await geminiService.query(screenshot, query)
+
+        setMessages(prev => [...prev, createAssistantMessage(result.answer, screenshot)])
+    }
+
+    const handleWalkthroughIntent = async (query: string) => {
+        const screenshot = await takeScreenshot()
+        setStatusMessage(`Starting walkthrough for "${query}"...`)
+
+        const stepResult = await geminiService.walkthroughNextStep(screenshot, query, [])
+
+        const firstStep: WalkthroughStep = {
+            stepNumber: 1,
+            screenshot,
+            caption: stepResult.caption,
+            instruction: stepResult.instruction,
+            points: stepResult.points,
+            boxes: stepResult.boxes
+        }
+
+        const newSession: WalkthroughSession = {
+            goal: query,
+            steps: [firstStep],
+            currentStepIndex: 0,
+            isActive: true,
+            isComplete: stepResult.isComplete
+        }
+
+        setWalkthroughSession(newSession)
+        setMessages(prev => [...prev, createAssistantMessage(
+            `Step 1: ${firstStep.instruction}`,
+            screenshot,
+            firstStep.points,
+            firstStep.boxes,
+            firstStep.caption
+        )])
+
+        await openScreenOverlay(
+            firstStep.points,
+            firstStep.boxes,
+            1,
+            1,
+            firstStep.instruction,
+            firstStep.caption,
+            stepResult.isComplete
+        )
+        overlayWindowExistsRef.current = true
     }
 
     const handleSend = async () => {
         if (!input.trim() || isProcessing) return
 
-        // Clear previous conversation - helper is stateless
-        setMessages([])
-
+        setMessages([]) // Clear previous conversation - helper is stateless
         setIsProcessing(true)
-        const userMessage: Message = {
-            id: Date.now().toString(),
-            role: 'user',
-            content: input
-        }
 
+        const userMessage = createAssistantMessage(input)
+        userMessage.role = 'user'
         setMessages(prev => [...prev, userMessage])
+
         const query = input
         setInput('')
 
         try {
-            // Classify intent
             setStatusMessage('Analyzing request...')
             const intent = await geminiService.classifyIntent(query)
 
-            // Execute based on classified intent
-            if (intent === 'text-only') {
-                // No screenshot needed for text-only queries
-                setStatusMessage('Answering...')
-                const queryResult = await geminiService.answerTextOnly(query)
-
-                const assistantMessage: Message = {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content: queryResult.answer
-                }
-                setMessages(prev => [...prev, assistantMessage])
-            } else if (intent === 'point') {
-                // Take screenshot only when needed
-                setStatusMessage('📸')
-                const screenshotDataUrl = await invoke<string>('take_screenshot')
-
-                setStatusMessage(`Finding "${query}"...`)
-                const pointResult = await visionService.point(screenshotDataUrl, query)
-
-                const assistantMessage: Message = {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content: `Found ${pointResult.points.length} instance(s) of "${query}"`,
-                    image: screenshotDataUrl,
-                    points: pointResult.points
-                }
-                setMessages(prev => [...prev, assistantMessage])
-
-                // Show overlay on screen
-                await openScreenOverlay(
-                    pointResult.points,
-                    [],
-                    pointResult.points.length,
-                    pointResult.points.length
-                )
-            } else if (intent === 'detect') {
-                // Take screenshot only when needed
-                setStatusMessage('📸')
-                const screenshotDataUrl = await invoke<string>('take_screenshot')
-
-                setStatusMessage(`Detecting "${query}"...`)
-                const detectResult = await visionService.detect(screenshotDataUrl, query)
-
-                const assistantMessage: Message = {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content: `Detected ${detectResult.objects.length} object(s) matching "${query}"`,
-                    image: screenshotDataUrl,
-                    boxes: detectResult.objects
-                }
-                setMessages(prev => [...prev, assistantMessage])
-
-                // Show overlay on screen
-                await openScreenOverlay(
-                    [],
-                    detectResult.objects,
-                    detectResult.objects.length,
-                    detectResult.objects.length
-                )
-            } else if (intent === 'walkthrough') {
-                // Initialize iterative walkthrough session
-                setStatusMessage('📸')
-                const screenshotDataUrl = await invoke<string>('take_screenshot')
-
-                setStatusMessage(`Starting walkthrough for "${query}"...`)
-
-                // Get the first step
-                const stepResult = await visionService.walkthroughNextStep(
-                    screenshotDataUrl,
-                    query,
-                    [] // No previous steps yet
-                )
-
-                // Create the first step
-                const firstStep: WalkthroughStep = {
-                    stepNumber: 1,
-                    screenshot: screenshotDataUrl,
-                    instruction: stepResult.instruction,
-                    points: stepResult.points,
-                    boxes: stepResult.boxes
-                }
-
-                // Initialize session
-                const newSession: WalkthroughSession = {
-                    goal: query,
-                    steps: [firstStep],
-                    currentStepIndex: 0,
-                    isActive: true,
-                    isComplete: stepResult.isComplete
-                }
-
-                setWalkthroughSession(newSession)
-
-                // Add to messages
-                const assistantMessage: Message = {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content: `Step 1: ${firstStep.instruction}`,
-                    image: screenshotDataUrl,
-                    points: firstStep.points,
-                    boxes: firstStep.boxes
-                }
-                setMessages(prev => [...prev, assistantMessage])
-
-                // Show overlay on screen
-                await openScreenOverlay(
-                    firstStep.points,
-                    firstStep.boxes,
-                    1,
-                    1,
-                    firstStep.instruction,
-                    stepResult.isComplete
-                )
-                overlayWindowExistsRef.current = true
-            } else {
-                // 'query' intent - needs screenshot to answer questions about the screen
-                setStatusMessage('📸')
-                const screenshotDataUrl = await invoke<string>('take_screenshot')
-
-                setStatusMessage('Answering...')
-                const queryResult = await visionService.query(screenshotDataUrl, query)
-
-                const assistantMessage: Message = {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content: queryResult.answer,
-                    image: screenshotDataUrl
-                }
-                setMessages(prev => [...prev, assistantMessage])
+            // Execute intent handler
+            switch (intent) {
+                case 'text-only':
+                    await handleTextOnlyIntent(query)
+                    break
+                case 'point':
+                    await handlePointIntent(query)
+                    break
+                case 'detect':
+                    await handleDetectIntent(query)
+                    break
+                case 'walkthrough':
+                    await handleWalkthroughIntent(query)
+                    break
+                case 'query':
+                    await handleQueryIntent(query)
+                    break
             }
         } catch (error) {
             console.error('Error details:', error)
-            const errorMessage: Message = {
-                id: Date.now().toString(),
-                role: 'assistant',
-                content: `Error: ${error instanceof Error ? error.message : String(error)}`
-            }
-            setMessages(prev => [...prev, errorMessage])
+            setMessages(prev => [...prev, createAssistantMessage(
+                `Error: ${error instanceof Error ? error.message : String(error)}`
+            )])
         } finally {
             setStatusMessage('')
             setIsProcessing(false)
@@ -430,13 +328,6 @@ export function Helper() {
                     <div ref={scrollRef} className="p-4 space-y-3">
                         {messages.map((message, index) => {
                             const isLastMessage = index === messages.length - 1
-                            if (isLastMessage) {
-                                console.log('Last message - should show button?', {
-                                    hasSession: !!walkthroughSession,
-                                    isComplete: walkthroughSession?.isComplete,
-                                    shouldShow: !!walkthroughSession && !walkthroughSession.isComplete
-                                })
-                            }
                             return (
                                 <div key={message.id}>
                                     <div
@@ -453,7 +344,7 @@ export function Helper() {
                                     {message.image && (
                                         <div
                                             className="mt-3 cursor-pointer rounded-lg overflow-hidden border-2 border-zinc-700/50 hover:border-blue-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/20 group relative"
-                                            onClick={() => openFullscreenViewer(message.image!, message.points, message.boxes)}
+                                            onClick={() => openFullscreenViewer(message.image!, message.points, message.boxes, message.caption)}
                                         >
                                             <div className="relative">
                                                 <img
@@ -471,7 +362,7 @@ export function Helper() {
                                                         }}
                                                     >
                                                         <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-xs px-2 py-0.5 rounded whitespace-nowrap">
-                                                            {idx + 1}
+                                                            {message.caption || (idx + 1)}
                                                         </div>
                                                     </div>
                                                 ))}
@@ -480,14 +371,14 @@ export function Helper() {
                                                         key={`box-${idx}`}
                                                         className="absolute border-2 border-green-500 bg-green-500/10 shadow-lg"
                                                         style={{
-                                                            left: `${box.x_min * 100}%`,
-                                                            top: `${box.y_min * 100}%`,
-                                                            width: `${(box.x_max - box.x_min) * 100}%`,
-                                                            height: `${(box.y_max - box.y_min) * 100}%`
+                                                            left: `${box.xMin * 100}%`,
+                                                            top: `${box.yMin * 100}%`,
+                                                            width: `${(box.xMax - box.xMin) * 100}%`,
+                                                            height: `${(box.yMax - box.yMin) * 100}%`
                                                         }}
                                                     >
                                                         <div className="absolute -top-6 left-0 bg-green-500 text-white text-xs px-2 py-0.5 rounded whitespace-nowrap">
-                                                            {idx + 1}
+                                                            {message.caption || (idx + 1)}
                                                         </div>
                                                     </div>
                                                 ))}

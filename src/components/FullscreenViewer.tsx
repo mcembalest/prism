@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { listen } from '@tauri-apps/api/event'
-import { Point, BoundingBox } from '@/services/vision'
+import type { Point, BoundingBox } from '@/types/coordinates'
 
 interface FullscreenData {
     image: string
     points: Point[]
     boxes: BoundingBox[]
+    caption?: string
 }
 
 export function FullscreenViewer() {
@@ -79,7 +80,7 @@ export function FullscreenViewer() {
                         }}
                     >
                         <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-sm px-2 py-1 rounded whitespace-nowrap font-bold">
-                            {idx + 1}
+                            {data.caption || (idx + 1)}
                         </div>
                     </div>
                 ))}
@@ -88,14 +89,14 @@ export function FullscreenViewer() {
                         key={`box-${idx}`}
                         className="absolute border-4 border-green-500 bg-green-500/10 shadow-xl"
                         style={{
-                            left: `${box.x_min * 100}%`,
-                            top: `${box.y_min * 100}%`,
-                            width: `${(box.x_max - box.x_min) * 100}%`,
-                            height: `${(box.y_max - box.y_min) * 100}%`
+                            left: `${box.xMin * 100}%`,
+                            top: `${box.yMin * 100}%`,
+                            width: `${(box.xMax - box.xMin) * 100}%`,
+                            height: `${(box.yMax - box.yMin) * 100}%`
                         }}
                     >
                         <div className="absolute -top-10 left-0 bg-green-500 text-white text-base px-3 py-1 rounded font-bold shadow-lg">
-                            {idx + 1}
+                            {data.caption || (idx + 1)}
                         </div>
                     </div>
                 ))}

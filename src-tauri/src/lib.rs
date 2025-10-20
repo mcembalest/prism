@@ -1,8 +1,28 @@
 use screenshots::Screen;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use serde::{Deserialize, Serialize};
 
+
+// Helper to wait for a window to emit a ready event
+async fn wait_for_window_ready(window: &WebviewWindow, event_name: &str) {
+    use tauri::Listener;
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let mut tx_option = Some(tx);
+
+    window.once(event_name, move |_event| {
+        if let Some(tx) = tx_option.take() {
+            let _ = tx.send(());
+        }
+    });
+
+    // Wait for ready signal with 5 second timeout
+    let _ = tokio::time::timeout(
+        tokio::time::Duration::from_secs(5),
+        rx
+    ).await;
+}
 
 struct WindowHide<'a> {
     window: &'a tauri::Window,
@@ -13,7 +33,7 @@ struct WindowHide<'a> {
 fn set_window_alpha(window: &tauri::Window, alpha: f64) -> Result<(), String> {
     use cocoa::appkit::NSWindow;
     use cocoa::base::id;
-    
+
     unsafe {
         let ns_window = window.ns_window().map_err(|e| e.to_string())? as id;
         NSWindow::setAlphaValue_(ns_window, alpha);
@@ -51,6 +71,7 @@ struct FullscreenPayload {
     image: String,
     points: Vec<Point>,
     boxes: Vec<BoundingBox>,
+    caption: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -62,17 +83,20 @@ struct OverlayPayload {
     #[serde(rename = "currentStep")]
     current_step: Option<u32>,
     instruction: Option<String>,
+    caption: Option<String>,
     #[serde(rename = "isComplete")]
     is_complete: Option<bool>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Point {
     x: f64,
     y: f64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct BoundingBox {
     x_min: f64,
     y_min: f64,
@@ -119,8 +143,8 @@ async fn open_fullscreen_viewer(
     image: String,
     points: Vec<Point>,
     boxes: Vec<BoundingBox>,
+    caption: Option<String>,
 ) -> Result<(), String> {
-    use tauri::Listener;
 
     // Close existing viewer window if any
     if let Some(window) = app.get_webview_window("image-viewer") {
@@ -153,29 +177,12 @@ async fn open_fullscreen_viewer(
     .build()
     .map_err(|e| e.to_string())?;
 
-    // Clone data for the async block
+    let payload = FullscreenPayload { image, points, boxes, caption };
+
+    // Wait for window to be ready, then send data
     let window_clone = window.clone();
-    let payload = FullscreenPayload { image, points, boxes };
-
-    // Listen for the "viewer-ready" event from the window
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    let mut tx_option = Some(tx);
-
-    window.once("viewer-ready", move |_event| {
-        if let Some(tx) = tx_option.take() {
-            let _ = tx.send(());
-        }
-    });
-
-    // Spawn a task to wait for ready signal and send data
     tokio::spawn(async move {
-        // Wait for ready signal with timeout
-        let _ = tokio::time::timeout(
-            tokio::time::Duration::from_secs(5),
-            rx
-        ).await;
-
-        // Send the data
+        wait_for_window_ready(&window_clone, "viewer-ready").await;
         let _ = window_clone.emit("fullscreen-data", payload);
     });
 
@@ -278,9 +285,9 @@ async fn open_screen_overlay(
     walkthrough_steps: Option<u32>,
     current_step: Option<u32>,
     instruction: Option<String>,
+    caption: Option<String>,
     is_complete: Option<bool>,
 ) -> Result<(), String> {
-    use tauri::Listener;
 
     // Close existing overlay window if any
     if let Some(window) = app.get_webview_window("screen-overlay") {
@@ -312,56 +319,21 @@ async fn open_screen_overlay(
     // Make window click-through (ignore cursor events)
     let _ = window.set_ignore_cursor_events(true);
 
-    // Log window creation for debugging
-    eprintln!("Created overlay window at 0,0 with size {}x{}", screen_width, screen_height);
+    let payload = OverlayPayload {
+        points,
+        boxes,
+        walkthrough_steps,
+        current_step,
+        instruction,
+        caption,
+        is_complete,
+    };
 
-    // Clone data for the async block
+    // Wait for window to be ready, then send data
     let window_clone = window.clone();
-
-    // Listen for the "overlay-ready" event from the window
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    let mut tx_option = Some(tx);
-
-    window.once("overlay-ready", move |_event| {
-        eprintln!("Received overlay-ready event from frontend");
-        if let Some(tx) = tx_option.take() {
-            let _ = tx.send(());
-        }
-    });
-
-    // Spawn a task to wait for ready signal and send data
     tokio::spawn(async move {
-        eprintln!("Waiting for overlay-ready event...");
-        // Wait for ready signal with timeout
-        let result = tokio::time::timeout(
-            tokio::time::Duration::from_secs(5),
-            rx
-        ).await;
-
-        match result {
-            Ok(_) => eprintln!("overlay-ready signal received"),
-            Err(_) => eprintln!("overlay-ready timeout after 5 seconds"),
-        }
-
-        // Create payload using proper struct
-        let payload = OverlayPayload {
-            points,
-            boxes,
-            walkthrough_steps,
-            current_step,
-            instruction,
-            is_complete,
-        };
-
-        eprintln!("Sending overlay-data with {} points, {} boxes", payload.points.len(), payload.boxes.len());
-
-        // Send the data
-        let emit_result = window_clone.emit("overlay-data", payload);
-        if let Err(e) = emit_result {
-            eprintln!("Failed to emit overlay-data: {:?}", e);
-        } else {
-            eprintln!("overlay-data emitted successfully");
-        }
+        wait_for_window_ready(&window_clone, "overlay-ready").await;
+        let _ = window_clone.emit("overlay-data", payload);
     });
 
     Ok(())
@@ -375,6 +347,7 @@ async fn update_screen_overlay_data(
     walkthrough_steps: Option<u32>,
     current_step: Option<u32>,
     instruction: Option<String>,
+    caption: Option<String>,
     is_complete: Option<bool>,
 ) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("screen-overlay") {
@@ -384,6 +357,7 @@ async fn update_screen_overlay_data(
             walkthrough_steps,
             current_step,
             instruction,
+            caption,
             is_complete,
         };
         window.emit("overlay-data", payload)
@@ -397,10 +371,8 @@ async fn update_screen_overlay_data(
 
 #[tauri::command]
 async fn close_screen_overlay(app: tauri::AppHandle) -> Result<(), String> {
-    // Close overlay window if it exists
     if let Some(window) = app.get_webview_window("screen-overlay") {
         window.close().map_err(|e| e.to_string())?;
-        eprintln!("Closed screen overlay window");
     }
     Ok(())
 }

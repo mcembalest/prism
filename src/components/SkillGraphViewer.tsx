@@ -1,34 +1,7 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import type { SkillTask, GroupedSkill, Command } from '@/types/skills'
 import './SkillGraphViewer.css'
-
-// Types
-interface Step {
-    tag?: string | null
-    text: string
-}
-
-interface SkillTask {
-    skill: string
-    level: string
-    prerequisites: string[]
-    task: string
-    steps: Step[]
-    commands?: Array<string | { id?: number; code?: string; cmd?: string; text?: string; label?: string; tag?: string }>
-}
-
-interface GroupedSkill {
-    name: string
-    level: string
-    tasks: SkillTask[]
-}
-
-interface Command {
-    id: number | string
-    code: string
-    label?: string | null
-    tag?: string | null
-}
 
 const levelOrder: { [key: string]: number } = { 'Basic': 0, 'Intermediate': 1, 'Advanced': 2 }
 

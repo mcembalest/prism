@@ -53,7 +53,7 @@ export function Settings() {
           }}
         >
           <span className="text-xs font-semibold text-white/90">Prism Settings</span>
-          <div className="flex items-center gap-1" style={{ WebkitAppRegion: 'no-drag' as any }} data-no-drag>
+          <div className="flex items-center gap-1" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties} data-no-drag>
             <Button
               variant="ghost"
               size="icon"

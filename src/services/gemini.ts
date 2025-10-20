@@ -1,51 +1,17 @@
-const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
-
-export interface Point {
-  x: number
-  y: number
-}
-
-export interface QueryResult {
-  answer: string
-  request_id?: string
-}
-
-export interface PointResult {
-  points: Point[]
-  request_id?: string
-}
-
-export interface BoundingBox {
-  x_min: number
-  y_min: number
-  x_max: number
-  y_max: number
-}
-
-export interface DetectResult {
-  objects: BoundingBox[]
-  request_id?: string
-}
-
-export interface WalkthroughResult {
-  points: Point[]
-  narrative: string
-  request_id?: string
-}
-
-export interface WalkthroughStepResult {
-  instruction: string
-  points: Point[]
-  boxes: BoundingBox[]
-  isComplete: boolean
-  request_id?: string
-}
-
-export type IntentType = 'query' | 'point' | 'detect' | 'walkthrough' | 'text-only'
+import { GoogleGenAI } from '@google/genai'
+import type { Point, BoundingBox } from '@/types/coordinates'
+import type {
+  QueryResult,
+  PointResult,
+  DetectResult,
+  WalkthroughResult,
+  WalkthroughStepResult,
+  IntentType
+} from '@/types/walkthrough'
 
 type GeminiPart =
   | { text: string }
-  | { inline_data: { mime_type: string; data: string } }
+  | { inlineData: { mimeType: string; data: string } }
 
 interface GeminiResponseCandidatePart {
   text?: string
@@ -61,13 +27,29 @@ interface GeminiResponse {
   promptFeedback?: unknown
 }
 
-function dataUrlToInlineData(dataUrl: string): { mime_type: string; data: string } {
+function dataUrlToInlineData(dataUrl: string): { mimeType: string; data: string } {
   // Expect formats like: data:image/png;base64,XXXXX
   const match = dataUrl.match(/^data:([^;]+);base64,(.*)$/)
   if (!match) {
     throw new Error('Invalid data URL passed to Gemini service')
   }
-  return { mime_type: match[1], data: match[2] }
+  return { mimeType: match[1], data: match[2] }
+}
+
+function getGeminiApiKey(): string {
+  try {
+    return localStorage.getItem('prism_gemini_api_key') || ''
+  } catch {
+    return ''
+  }
+}
+
+function getGeminiClient(): GoogleGenAI {
+  const API_KEY = getGeminiApiKey()
+  if (!API_KEY) {
+    throw new Error('Gemini API key not set. Open Settings to add it.')
+  }
+  return new GoogleGenAI({ apiKey: API_KEY })
 }
 
 async function callGemini(
@@ -76,34 +58,39 @@ async function callGemini(
     responseJson?: boolean
     responseSchema?: any
     responseMimeType?: string
+    thinkingBudget?: number
   }
 ): Promise<GeminiResponse> {
-  const API_KEY = getGeminiApiKey()
-  if (!API_KEY) {
-    throw new Error('Gemini API key not set. Open Settings to add it.')
-  }
-  const body: any = { contents: [{ parts }] }
+  const client = getGeminiClient()
+
+  const config: any = {}
+
   if (opts?.responseJson || opts?.responseSchema || opts?.responseMimeType) {
-    body.generationConfig = {}
+    config.generationConfig = {}
     if (opts.responseMimeType) {
-      body.generationConfig.response_mime_type = opts.responseMimeType
+      config.generationConfig.responseMimeType = opts.responseMimeType
     } else if (opts.responseJson) {
-      body.generationConfig.response_mime_type = 'application/json'
+      config.generationConfig.responseMimeType = 'application/json'
     }
     if (opts.responseSchema) {
-      body.generationConfig.response_schema = opts.responseSchema
+      config.generationConfig.responseSchema = opts.responseSchema
     }
   }
-  const res = await fetch(`${BASE_URL}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY || '' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Gemini API error ${res.status}: ${text}`)
+
+  // Add thinking budget configuration for detection tasks
+  if (opts?.thinkingBudget !== undefined) {
+    config.thinkingConfig = {
+      thinkingBudget: opts.thinkingBudget
+    }
   }
-  return (await res.json()) as GeminiResponse
+
+  const response = await client.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: parts,
+    ...config
+  })
+
+  return response as unknown as GeminiResponse
 }
 
 function extractFirstText(resp: GeminiResponse): string {
@@ -173,14 +160,15 @@ class GeminiService {
   async query(imageDataUrl: string, question: string): Promise<QueryResult> {
     const inline = dataUrlToInlineData(imageDataUrl)
     const resp = await callGemini([
-      { inline_data: inline },
+      { inlineData: inline },
       { text: `${question}\n\nRespond in 1-2 sentences maximum. Be concise and direct.` },
     ])
     const answer = extractFirstText(resp)
     return { answer }
   }
 
-  async point(imageDataUrl: string, object: string): Promise<PointResult> {
+  // Shared helper to detect bounding boxes from image
+  private async detectBoundingBoxes(imageDataUrl: string, object: string): Promise<GeminiBoxOrMaskItem[]> {
     const inline = dataUrlToInlineData(imageDataUrl)
     const prompt = [
       'Detect all instances of the target in the image.',
@@ -190,12 +178,19 @@ class GeminiService {
     ].join(' ')
 
     const resp = await callGemini([
-      { inline_data: inline },
+      { inlineData: inline },
       { text: prompt },
-    ], { responseJson: true })
+    ], {
+      responseJson: true,
+      thinkingBudget: 0  // Set thinking budget to 0 for better detection results
+    })
 
     const jsonText = extractFirstText(resp)
-    const items = safeParseJson<GeminiBoxOrMaskItem[]>(jsonText) || []
+    return safeParseJson<GeminiBoxOrMaskItem[]>(jsonText) || []
+  }
+
+  async point(imageDataUrl: string, object: string): Promise<PointResult> {
+    const items = await this.detectBoundingBoxes(imageDataUrl, object)
 
     const points: Point[] = []
     for (const item of items) {
@@ -212,21 +207,7 @@ class GeminiService {
   }
 
   async detect(imageDataUrl: string, object: string): Promise<DetectResult> {
-    const inline = dataUrlToInlineData(imageDataUrl)
-    const prompt = [
-      'Detect all instances of the target in the image.',
-      `Target: ${object}.`,
-      'Return ONLY a JSON array where each item has key "box_2d" as [y0, x0, y1, x1], normalized 0..1000.',
-      'Do not include markdown fences or extra text.',
-    ].join(' ')
-
-    const resp = await callGemini([
-      { inline_data: inline },
-      { text: prompt },
-    ], { responseJson: true })
-
-    const jsonText = extractFirstText(resp)
-    const items = safeParseJson<GeminiBoxOrMaskItem[]>(jsonText) || []
+    const items = await this.detectBoundingBoxes(imageDataUrl, object)
 
     const objects: BoundingBox[] = []
     for (const item of items) {
@@ -234,11 +215,11 @@ class GeminiService {
       if (!b || b.length !== 4) continue
       const [y0, x0, y1, x1] = b
       if (!(y1 > y0) || !(x1 > x0)) continue
-      const x_min = clamp01(x0 / 1000)
-      const y_min = clamp01(y0 / 1000)
-      const x_max = clamp01(x1 / 1000)
-      const y_max = clamp01(y1 / 1000)
-      objects.push({ x_min, y_min, x_max, y_max })
+      const xMin = clamp01(x0 / 1000)
+      const yMin = clamp01(y0 / 1000)
+      const xMax = clamp01(x1 / 1000)
+      const yMax = clamp01(y1 / 1000)
+      objects.push({ xMin, yMin, xMax, yMax })
     }
 
     return { objects }
@@ -264,7 +245,7 @@ class GeminiService {
     ].join('\n')
 
     const resp = await callGemini([
-      { inline_data: inline },
+      { inlineData: inline },
       { text: prompt },
     ], { responseJson: true })
 
@@ -312,35 +293,44 @@ class GeminiService {
       'If more steps are needed, identify the UI element to interact with and provide clear instruction.',
       '',
       'Return JSON with these fields:',
-      '1. "instruction": Clear, concise instruction for this step (e.g., "Click the File menu in the top-left corner")',
-      '2. "points": array of center points to highlight, each as {x, y} normalized 0.0-1.0 (use points for clickable elements)',
-      '3. "boxes": array of bounding boxes to highlight, each as {x_min, y_min, x_max, y_max} normalized 0.0-1.0 (use boxes for regions/areas)',
-      '4. "isComplete": boolean - true if the goal is fully achieved, false otherwise',
+      '1. "caption": Short 1-3 word label for the UI element (e.g., "File Menu", "Save Button", "Search Field")',
+      '2. "instruction": Clear, concise instruction for this step (e.g., "Click the File menu in the top-left corner")',
+      '3. Choose EITHER "points" OR "boxes" for each step (NEVER both):',
+      '   - Use "points" ONLY for single clickable UI elements (buttons, menu items, icons)',
+      '   - Use "boxes" ONLY for regions/areas to highlight (text fields, panels, sections)',
+      '4. "points": array of center points {x, y} normalized 0.0-1.0 OR empty array []',
+      '5. "boxes": array of bounding boxes {xMin, yMin, xMax, yMax} normalized 0.0-1.0 OR empty array []',
+      '6. "isComplete": boolean - true if the goal is fully achieved, false otherwise',
       '',
-      'Example for next step:',
-      '{"instruction": "Click the File menu in the top-left corner", "points": [{"x": 0.05, "y": 0.03}], "boxes": [], "isComplete": false}',
+      'Example for clickable element:',
+      '{"caption": "File Menu", "instruction": "Click the File menu in the top-left corner", "points": [{"x": 0.05, "y": 0.03}], "boxes": [], "isComplete": false}',
+      '',
+      'Example for region/area:',
+      '{"caption": "Search Field", "instruction": "Type your query in the search field", "points": [], "boxes": [{"xMin": 0.3, "yMin": 0.1, "xMax": 0.7, "yMax": 0.15}], "isComplete": false}',
       '',
       'Example for completion:',
-      '{"instruction": "Walkthrough complete! The file has been saved successfully.", "points": [], "boxes": [], "isComplete": true}',
+      '{"caption": "Complete", "instruction": "Walkthrough complete! The file has been saved successfully.", "points": [], "boxes": [], "isComplete": true}',
       '',
       'Do not include markdown fences or extra text.',
     ].join('\n')
 
     const resp = await callGemini([
-      { inline_data: inline },
+      { inlineData: inline },
       { text: prompt },
     ], { responseJson: true })
 
     const jsonText = extractFirstText(resp)
     const parsed = safeParseJson<{
+      caption?: string
       instruction?: string
       points?: Array<{ x?: number; y?: number }>
-      boxes?: Array<{ x_min?: number; y_min?: number; x_max?: number; y_max?: number }>
+      boxes?: Array<{ xMin?: number; yMin?: number; xMax?: number; yMax?: number }>
       isComplete?: boolean
     }>(jsonText)
 
     if (!parsed || !parsed.instruction) {
       return {
+        caption: 'Error',
         instruction: 'Unable to determine the next step.',
         points: [],
         boxes: [],
@@ -363,24 +353,25 @@ class GeminiService {
     if (parsed.boxes && Array.isArray(parsed.boxes)) {
       for (const b of parsed.boxes) {
         if (
-          b.x_min !== undefined &&
-          b.y_min !== undefined &&
-          b.x_max !== undefined &&
-          b.y_max !== undefined &&
-          b.x_max > b.x_min &&
-          b.y_max > b.y_min
+          b.xMin !== undefined &&
+          b.yMin !== undefined &&
+          b.xMax !== undefined &&
+          b.yMax !== undefined &&
+          b.xMax > b.xMin &&
+          b.yMax > b.yMin
         ) {
           boxes.push({
-            x_min: clamp01(b.x_min),
-            y_min: clamp01(b.y_min),
-            x_max: clamp01(b.x_max),
-            y_max: clamp01(b.y_max)
+            xMin: clamp01(b.xMin),
+            yMin: clamp01(b.yMin),
+            xMax: clamp01(b.xMax),
+            yMax: clamp01(b.yMax)
           })
         }
       }
     }
 
     return {
+      caption: parsed.caption || 'Step',
       instruction: parsed.instruction,
       points,
       boxes,
@@ -395,11 +386,3 @@ function clamp01(n: number): number {
 }
 
 export const geminiService = new GeminiService()
-
-function getGeminiApiKey(): string {
-  try {
-    return localStorage.getItem('prism_gemini_api_key') || ''
-  } catch {
-    return ''
-  }
-}
