@@ -1,6 +1,7 @@
 use screenshots::Screen;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use serde::{Deserialize, Serialize};
 
 
@@ -380,6 +381,7 @@ async fn close_screen_overlay(app: tauri::AppHandle) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_global_shortcut::Builder::new().build())
     .invoke_handler(tauri::generate_handler![take_screenshot, open_fullscreen_viewer, get_skills_data, open_skill_graph_viewer, open_settings_window, open_screen_overlay, update_screen_overlay_data, close_screen_overlay])
     .setup(|app| {
       if cfg!(debug_assertions) {
@@ -389,6 +391,14 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      // Register global shortcut for Proceed button (Cmd+Shift+Right)
+      let handle = app.handle().clone();
+      app.global_shortcut().on_shortcut("CmdOrCtrl+Shift+Right", move |_app, _shortcut, event| {
+        if event.state == ShortcutState::Pressed {
+          let _ = handle.emit("proceed-shortcut-triggered", ());
+        }
+      })?;
       #[cfg(target_os = "macos")]
       {
         use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};

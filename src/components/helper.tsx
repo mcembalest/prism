@@ -3,6 +3,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Send } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { geminiService } from '@/services/gemini'
 import type { Point, BoundingBox, Message, WalkthroughStep, WalkthroughSession } from '@/types/walkthrough'
 
@@ -15,6 +16,8 @@ export function Helper() {
     const overlayWindowExistsRef = useRef<boolean>(false)
     const scrollRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
+    const proceedHandlerRef = useRef<(() => Promise<void>) | null>(null)
+    const isExecutingShortcut = useRef<boolean>(false)
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -22,7 +25,54 @@ export function Helper() {
         }
     }, [messages])
 
+    // Listen for global keyboard shortcut to proceed to next step
+    useEffect(() => {
+        let unlisten: (() => void) | undefined
 
+        const setupListener = async () => {
+            unlisten = await listen('proceed-shortcut-triggered', async () => {
+                console.log('[Global Shortcut] Cmd+Shift+→ pressed')
+
+                // Prevent double execution from multiple listeners
+                if (isExecutingShortcut.current) {
+                    console.log('[Global Shortcut] Already executing, ignoring duplicate trigger')
+                    return
+                }
+
+                console.log('[Global Shortcut] Current state:', {
+                    hasSession: !!walkthroughSession,
+                    isComplete: walkthroughSession?.isComplete,
+                    isProcessing,
+                    hasHandler: !!proceedHandlerRef.current
+                })
+
+                if (proceedHandlerRef.current) {
+                    isExecutingShortcut.current = true
+                    try {
+                        await proceedHandlerRef.current()
+                    } catch (err) {
+                        console.error('[Global Shortcut] Error executing proceed handler:', err)
+                    } finally {
+                        isExecutingShortcut.current = false
+                    }
+                } else {
+                    console.warn('[Global Shortcut] Handler ref is null')
+                }
+            })
+            console.log('[Global Shortcut] Listener registered successfully')
+        }
+
+        setupListener()
+
+        return () => {
+            if (unlisten) {
+                console.log('[Global Shortcut] Unregistering listener')
+                unlisten()
+            }
+        }
+    }, [])
+
+    // @ts-expect-error - Function defined for future use
     const openFullscreenViewer = async (imageUrl: string, points: Point[] = [], boxes: BoundingBox[] = [], caption?: string) => {
         try {
             await invoke('open_fullscreen_viewer', {
@@ -62,7 +112,18 @@ export function Helper() {
 
     const handleProceedToNextStep = async () => {
         const session = walkthroughSession
-        if (!session || session.isComplete || isProcessing) return
+        console.log('[Proceed Handler] Called with state:', {
+            hasSession: !!session,
+            isComplete: session?.isComplete,
+            isProcessing,
+            currentStep: session?.currentStepIndex,
+            totalSteps: session?.steps.length
+        })
+
+        if (!session || session.isComplete || isProcessing) {
+            console.log('[Proceed Handler] Blocked - session:', !session, 'complete:', session?.isComplete, 'processing:', isProcessing)
+            return
+        }
 
         try {
             setIsProcessing(true)
@@ -85,6 +146,14 @@ export function Helper() {
                 session.goal,
                 previousSteps
             )
+
+            console.log('[Proceed Handler] AI response:', {
+                instruction: stepResult.instruction,
+                isComplete: stepResult.isComplete,
+                caption: stepResult.caption,
+                pointsCount: stepResult.points.length,
+                boxesCount: stepResult.boxes.length
+            })
 
             const newStep: WalkthroughStep = {
                 stepNumber: session.steps.length + 1,
@@ -115,14 +184,22 @@ export function Helper() {
                 caption: newStep.caption
             }
             setMessages(prev => [...prev, assistantMessage])
+            console.log('[Proceed Handler] Successfully completed step', newStep.stepNumber)
         } catch (error) {
-            console.error('Error getting next step:', error)
+            console.error('[Proceed Handler] Error getting next step:', error)
             setStatusMessage(`Error: ${error}`)
         } finally {
             setIsProcessing(false)
             setStatusMessage('')
+            console.log('[Proceed Handler] Finished, isProcessing set to false')
         }
     }
+
+    // Keep the ref updated with the latest handler
+    useEffect(() => {
+        proceedHandlerRef.current = handleProceedToNextStep
+        console.log('[Global Shortcut] Handler ref updated - processing:', isProcessing, 'session:', !!walkthroughSession)
+    }, [walkthroughSession, isProcessing])
 
     const updateOverlayWithSession = async (session: WalkthroughSession) => {
         const currentStep = session.steps[session.currentStepIndex]
@@ -341,53 +418,6 @@ export function Helper() {
                                                 }`}
                                         >
                                     <p className="text-sm leading-relaxed">{message.content}</p>
-                                    {message.image && (
-                                        <div
-                                            className="mt-3 cursor-pointer rounded-lg overflow-hidden border-2 border-zinc-700/50 hover:border-blue-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/20 group relative"
-                                            onClick={() => openFullscreenViewer(message.image!, message.points, message.boxes, message.caption)}
-                                        >
-                                            <div className="relative">
-                                                <img
-                                                    src={message.image}
-                                                    alt="Message attachment"
-                                                    className="w-full h-auto rounded"
-                                                />
-                                                {message.points && message.points.map((point, idx) => (
-                                                    <div
-                                                        key={`point-${idx}`}
-                                                        className="absolute w-3 h-3 bg-red-500 border-2 border-white rounded-full shadow-lg transform -translate-x-1/2 -translate-y-1/2"
-                                                        style={{
-                                                            left: `${point.x * 100}%`,
-                                                            top: `${point.y * 100}%`
-                                                        }}
-                                                    >
-                                                        <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-xs px-2 py-0.5 rounded whitespace-nowrap">
-                                                            {message.caption || (idx + 1)}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                                {message.boxes && message.boxes.map((box, idx) => (
-                                                    <div
-                                                        key={`box-${idx}`}
-                                                        className="absolute border-2 border-green-500 bg-green-500/10 shadow-lg"
-                                                        style={{
-                                                            left: `${box.xMin * 100}%`,
-                                                            top: `${box.yMin * 100}%`,
-                                                            width: `${(box.xMax - box.xMin) * 100}%`,
-                                                            height: `${(box.yMax - box.yMin) * 100}%`
-                                                        }}
-                                                    >
-                                                        <div className="absolute -top-6 left-0 bg-green-500 text-white text-xs px-2 py-0.5 rounded whitespace-nowrap">
-                                                            {message.caption || (idx + 1)}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center pointer-events-none">
-                                                <span className="text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity">Click to fullscreen</span>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
