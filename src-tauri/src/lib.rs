@@ -80,14 +80,6 @@ async fn wait_for_window_ready(window: &WebviewWindow, event_name: &str) {
 }
 
 #[derive(Clone, Serialize)]
-struct FullscreenPayload {
-    image: String,
-    points: Vec<Point>,
-    boxes: Vec<BoundingBox>,
-    caption: Option<String>,
-}
-
-#[derive(Clone, Serialize)]
 struct OverlayPayload {
     points: Vec<Point>,
     boxes: Vec<BoundingBox>,
@@ -433,18 +425,9 @@ mod window_management {
         Ok(windows)
     }
 
-    pub fn get_window_at_position(_x: f64, _y: f64) -> Result<FocusedWindowInfo, String> {
-        let windows = get_all_windows()?;
-
-        // For now, just return the first window that's not Prism
-        windows.into_iter()
-            .next()
-            .ok_or_else(|| "No suitable window found".to_string())
-    }
-
     pub fn arrange_windows(
         focused_window: &FocusedWindowInfo,
-        prism_window: &WebviewWindow
+        _prism_window: &WebviewWindow
     ) -> Result<(), String> {
         println!("[Prism] Starting window arrangement for: {}", focused_window.owner_name);
 
