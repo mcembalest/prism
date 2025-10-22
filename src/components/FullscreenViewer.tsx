@@ -14,7 +14,6 @@ export function FullscreenViewer() {
     const [data, setData] = useState<FullscreenData | null>(null)
 
     useEffect(() => {
-        console.log('FullscreenViewer mounted, setting up listener')
 
         // Listen for the fullscreen data
         const setupListener = async () => {

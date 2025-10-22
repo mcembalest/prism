@@ -72,20 +72,6 @@ export function Helper() {
         }
     }, [])
 
-    // @ts-expect-error - Function defined for future use
-    const openFullscreenViewer = async (imageUrl: string, points: Point[] = [], boxes: BoundingBox[] = [], caption?: string) => {
-        try {
-            await invoke('open_fullscreen_viewer', {
-                image: imageUrl,
-                points,
-                boxes,
-                caption
-            })
-        } catch (error) {
-            console.error('Failed to open fullscreen viewer:', error)
-        }
-    }
-
     const openScreenOverlay = async (
         points: Point[] = [],
         boxes: BoundingBox[] = [],

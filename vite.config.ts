@@ -29,8 +29,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'index.html'),
-        fullscreen: path.resolve(__dirname, 'fullscreen.html'),
-        skillgraph: path.resolve(__dirname, 'skillgraph.html'),
         settings: path.resolve(__dirname, 'settings.html'),
         overlay: path.resolve(__dirname, 'overlay.html'),
       },
