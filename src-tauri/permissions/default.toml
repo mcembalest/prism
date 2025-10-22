@@ -2,7 +2,6 @@
 description = "Default permissions for custom commands"
 permissions = [
   "allow-take-screenshot",
-  "allow-get-skills-data",
   "allow-open-settings-window",
   "allow-open-screen-overlay",
   "allow-update-screen-overlay-data",
@@ -21,14 +20,6 @@ description = "Allows the take_screenshot command"
 
 [permission.commands]
 allow = ["take_screenshot"]
-deny = []
-
-[[permission]]
-identifier = "allow-get-skills-data"
-description = "Allows the get_skills_data command"
-
-[permission.commands]
-allow = ["get_skills_data"]
 deny = []
 
 [[permission]]

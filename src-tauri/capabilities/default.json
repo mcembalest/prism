@@ -22,7 +22,6 @@
     "core:event:allow-emit",
     "core:event:allow-emit-to",
     "allow-take-screenshot",
-    "allow-get-skills-data",
     "allow-open-settings-window",
     "allow-open-screen-overlay",
     "allow-update-screen-overlay-data",

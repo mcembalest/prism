@@ -241,7 +241,7 @@ export function Helper() {
 
     // Helper to take screenshot with fade animation
     const takeScreenshot = async (): Promise<string> => {
-        setStatusMessage('📸')
+        setStatusMessage('Analyzing...')
         return await invoke<string>('take_screenshot')
     }
 
