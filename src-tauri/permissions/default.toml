@@ -8,7 +8,13 @@ permissions = [
   "allow-open-settings-window",
   "allow-open-screen-overlay",
   "allow-update-screen-overlay-data",
-  "allow-close-screen-overlay"
+  "allow-close-screen-overlay",
+  "allow-get-available-windows",
+  "allow-arrange-windows",
+  "allow-start-focus-selection-mode",
+  "allow-stop-focus-selection-mode",
+  "allow-get-focus-selection-mode",
+  "allow-get-focused-window"
 ]
 
 [[permission]]
@@ -73,4 +79,52 @@ description = "Allows the close_screen_overlay command"
 
 [permission.commands]
 allow = ["close_screen_overlay"]
+deny = []
+
+[[permission]]
+identifier = "allow-get-available-windows"
+description = "Allows the get_available_windows command"
+
+[permission.commands]
+allow = ["get_available_windows"]
+deny = []
+
+[[permission]]
+identifier = "allow-arrange-windows"
+description = "Allows the arrange_windows command"
+
+[permission.commands]
+allow = ["arrange_windows"]
+deny = []
+
+[[permission]]
+identifier = "allow-start-focus-selection-mode"
+description = "Allows the start_focus_selection_mode command"
+
+[permission.commands]
+allow = ["start_focus_selection_mode"]
+deny = []
+
+[[permission]]
+identifier = "allow-stop-focus-selection-mode"
+description = "Allows the stop_focus_selection_mode command"
+
+[permission.commands]
+allow = ["stop_focus_selection_mode"]
+deny = []
+
+[[permission]]
+identifier = "allow-get-focus-selection-mode"
+description = "Allows the get_focus_selection_mode command"
+
+[permission.commands]
+allow = ["get_focus_selection_mode"]
+deny = []
+
+[[permission]]
+identifier = "allow-get-focused-window"
+description = "Allows the get_focused_window command"
+
+[permission.commands]
+allow = ["get_focused_window"]
 deny = []

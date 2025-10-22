@@ -28,6 +28,12 @@
     "allow-open-settings-window",
     "allow-open-screen-overlay",
     "allow-update-screen-overlay-data",
-    "allow-close-screen-overlay"
+    "allow-close-screen-overlay",
+    "allow-get-available-windows",
+    "allow-arrange-windows",
+    "allow-start-focus-selection-mode",
+    "allow-stop-focus-selection-mode",
+    "allow-get-focus-selection-mode",
+    "allow-get-focused-window"
   ]
 }
