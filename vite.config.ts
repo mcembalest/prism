@@ -1,14 +1,39 @@
-import path from "path"
-import tailwindcss from "@tailwindcss/vite"
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path'
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      '@': path.resolve(__dirname, './src'),
     },
   },
+  // Tauri expects a fixed port to work with
+  server: {
+    port: 1420,
+    strictPort: true,
+  },
+  // Vite options tailored for Tauri development
+  clearScreen: false,
+  envPrefix: ['VITE_', 'TAURI_'],
+  build: {
+    // Tauri supports es2021
+    target: process.env.TAURI_PLATFORM == 'windows' ? 'chrome105' : 'safari13',
+    // don't minify for debug builds
+    minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
+    // produce sourcemaps for debug builds
+    sourcemap: !!process.env.TAURI_DEBUG,
+    // Multi-page app configuration
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        fullscreen: path.resolve(__dirname, 'fullscreen.html'),
+        skillgraph: path.resolve(__dirname, 'skillgraph.html'),
+        settings: path.resolve(__dirname, 'settings.html'),
+        overlay: path.resolve(__dirname, 'overlay.html'),
+      },
+    },
+  }
 })

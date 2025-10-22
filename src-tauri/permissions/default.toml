@@ -1,0 +1,130 @@
+[default]
+description = "Default permissions for custom commands"
+permissions = [
+  "allow-take-screenshot",
+  "allow-open-fullscreen-viewer",
+  "allow-get-skills-data",
+  "allow-open-skill-graph-viewer",
+  "allow-open-settings-window",
+  "allow-open-screen-overlay",
+  "allow-update-screen-overlay-data",
+  "allow-close-screen-overlay",
+  "allow-get-available-windows",
+  "allow-arrange-windows",
+  "allow-start-focus-selection-mode",
+  "allow-stop-focus-selection-mode",
+  "allow-get-focus-selection-mode",
+  "allow-get-focused-window"
+]
+
+[[permission]]
+identifier = "allow-take-screenshot"
+description = "Allows the take_screenshot command"
+
+[permission.commands]
+allow = ["take_screenshot"]
+deny = []
+
+[[permission]]
+identifier = "allow-open-fullscreen-viewer"
+description = "Allows the open_fullscreen_viewer command"
+
+[permission.commands]
+allow = ["open_fullscreen_viewer"]
+deny = []
+
+[[permission]]
+identifier = "allow-get-skills-data"
+description = "Allows the get_skills_data command"
+
+[permission.commands]
+allow = ["get_skills_data"]
+deny = []
+
+[[permission]]
+identifier = "allow-open-skill-graph-viewer"
+description = "Allows the open_skill_graph_viewer command"
+
+[permission.commands]
+allow = ["open_skill_graph_viewer"]
+deny = []
+
+[[permission]]
+identifier = "allow-open-settings-window"
+description = "Allows the open_settings_window command"
+
+[permission.commands]
+allow = ["open_settings_window"]
+deny = []
+
+[[permission]]
+identifier = "allow-open-screen-overlay"
+description = "Allows the open_screen_overlay command"
+
+[permission.commands]
+allow = ["open_screen_overlay"]
+deny = []
+
+[[permission]]
+identifier = "allow-update-screen-overlay-data"
+description = "Allows the update_screen_overlay_data command"
+
+[permission.commands]
+allow = ["update_screen_overlay_data"]
+deny = []
+
+[[permission]]
+identifier = "allow-close-screen-overlay"
+description = "Allows the close_screen_overlay command"
+
+[permission.commands]
+allow = ["close_screen_overlay"]
+deny = []
+
+[[permission]]
+identifier = "allow-get-available-windows"
+description = "Allows the get_available_windows command"
+
+[permission.commands]
+allow = ["get_available_windows"]
+deny = []
+
+[[permission]]
+identifier = "allow-arrange-windows"
+description = "Allows the arrange_windows command"
+
+[permission.commands]
+allow = ["arrange_windows"]
+deny = []
+
+[[permission]]
+identifier = "allow-start-focus-selection-mode"
+description = "Allows the start_focus_selection_mode command"
+
+[permission.commands]
+allow = ["start_focus_selection_mode"]
+deny = []
+
+[[permission]]
+identifier = "allow-stop-focus-selection-mode"
+description = "Allows the stop_focus_selection_mode command"
+
+[permission.commands]
+allow = ["stop_focus_selection_mode"]
+deny = []
+
+[[permission]]
+identifier = "allow-get-focus-selection-mode"
+description = "Allows the get_focus_selection_mode command"
+
+[permission.commands]
+allow = ["get_focus_selection_mode"]
+deny = []
+
+[[permission]]
+identifier = "allow-get-focused-window"
+description = "Allows the get_focused_window command"
+
+[permission.commands]
+allow = ["get_focused_window"]
+deny = []

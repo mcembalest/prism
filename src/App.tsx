@@ -1,7 +1,12 @@
-import HomePage from '@/app/home/page'
+import { PrismContainer } from './components/PrismContainer'
 
 function App() {
-  return <HomePage />
+  return (
+    <div className="h-screen w-full bg-transparent dark">
+      <PrismContainer />
+    </div>
+  )
 }
 
 export default App
+

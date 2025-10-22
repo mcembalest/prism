@@ -1,13 +1,21 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
-import { AppStateProvider } from './state/app-state'
+import './index.css'
+import { invoke } from '@tauri-apps/api/core'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <AppStateProvider>
-      <App />
-    </AppStateProvider>
-  </StrictMode>,
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
 )
+
+// If no API key is set, prompt user by opening Settings
+try {
+  const hasKey = localStorage.getItem('prism_gemini_api_key')
+  if (!hasKey) {
+    invoke('open_settings_window').catch(() => {})
+  }
+} catch {
+  // ignore
+}
