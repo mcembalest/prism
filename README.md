@@ -7,7 +7,7 @@ Prism delivers step-by-step on-screen product walkthroughs, helping your users k
 1. **Install Rust**: https://rust-lang.org/tools/install/
 2. **Install dependencies**: `npm install`
 3. **Run the app**: `npm run tauri dev`
-4. **Add API key** (⌘+,) to add your Gemini API key
+4. **Add API key:** Open `Prism > Settings` and add a [Gemini API key](https://aistudio.google.com/app/api-keys)
 
 ## How this is built
 
@@ -18,8 +18,8 @@ Tauri (Rust) backend
 Files to note:
 
 - `src/components/helper.tsx` - Chat interface & walkthrough logic
-- `src/services/gemini.ts` - Multimodal (vision+text) AI API
-- `src-tauri/src/lib.rs` - Screenshots, window management, commands
+- `src/services/gemini.ts` - Multimodal (vision+text) screenshot-to-action conversion using the Gemini API
+- `src-tauri/src/lib.rs` - Screenshots, window management, keyboard commands
 
 ## Todos
 
