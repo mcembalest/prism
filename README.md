@@ -26,3 +26,7 @@ Files to note:
 1. Pre-generate courses to be human-validated instead of relying on just-in-time determination of what to do and where to click with multimodal AI.
 2. Use playwright to browse in advance of guiding the user to pre-browse websites
 3. Is there a better way to build this than TypeScript + Tauri, i.e. is Rust not worth it?
+
+## Skills
+
+This is where we talk about skills.
