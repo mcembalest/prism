@@ -31,7 +31,7 @@ export function Helper() {
 
         const setupListener = async () => {
             unlisten = await listen('proceed-shortcut-triggered', async () => {
-                console.log('[Global Shortcut] Cmd+Shift+→ pressed')
+                console.log('[Global Shortcut] Cmd+Enter pressed')
 
                 // Prevent double execution from multiple listeners
                 if (isExecutingShortcut.current) {
@@ -415,7 +415,7 @@ export function Helper() {
                                         disabled={isProcessing}
                                         className="text-sm text-purple-400 hover:text-purple-300 underline decoration-2 underline-offset-4 disabled:opacity-50 disabled:cursor-not-allowed transition-colors bg-purple-500/10 hover:bg-purple-500/20 px-2 py-1 rounded"
                                     >
-                                        {isProcessing ? 'Processing...' : 'Proceed →'}
+                                        {isProcessing ? 'Processing...' : 'Proceed (⌘+Enter)'}
                                     </button>
                                 </div>
                             )}

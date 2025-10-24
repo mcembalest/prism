@@ -295,7 +295,7 @@ mod window_management {
             return Err(format!("Accessibility permissions required. Please grant Prism access in System Settings → Privacy & Security → Accessibility. Error: {}", error_msg));
         }
 
-        // Use AppleScript to get window list
+        // Use AppleScript to get window list - iterate through ALL windows for each process
         let script = r#"
             set output to ""
             tell application "System Events"
@@ -306,8 +306,15 @@ mod window_management {
                         set procID to unix id of proc
                         set winList to windows of proc
                         if (count of winList) > 0 then
-                            set winName to name of item 1 of winList
-                            set output to output & procName & "|" & winName & "|" & procID & "\n"
+                            set winIndex to 1
+                            repeat with win in winList
+                                try
+                                    set winName to name of win
+                                    set winID to procID * 1000 + winIndex
+                                    set output to output & procName & "|" & winName & "|" & procID & "|" & winID & "\n"
+                                    set winIndex to winIndex + 1
+                                end try
+                            end repeat
                         end if
                     end if
                 end repeat
@@ -333,7 +340,7 @@ mod window_management {
         let result = String::from_utf8_lossy(&output.stdout);
         println!("[Prism] AppleScript output: {:?}", result);
 
-        // Parse the AppleScript result - format is: app1|window1|pid1\napp2|window2|pid2\n...
+        // Parse the AppleScript result - format is: app1|window1|pid1|winID1\napp2|window2|pid2|winID2\n...
         let mut windows = Vec::new();
 
         for line in result.lines() {
@@ -343,17 +350,18 @@ mod window_management {
             }
 
             let parts: Vec<&str> = line.split('|').collect();
-            if parts.len() == 3 {
+            if parts.len() == 4 {
                 let owner_name = parts[0].trim().to_string();
                 let window_name = parts[1].trim().to_string();
                 let process_id = parts[2].trim().parse::<i32>().unwrap_or(0);
+                let window_id = parts[3].trim().parse::<i64>().unwrap_or(0);
 
-                println!("[Prism] Found window: {} - {} (PID: {})", owner_name, window_name, process_id);
+                println!("[Prism] Found window: {} - {} (PID: {}, WinID: {})", owner_name, window_name, process_id, window_id);
 
                 windows.push(FocusedWindowInfo {
                     owner_name,
                     window_name,
-                    window_id: process_id as i64,
+                    window_id,
                     process_id,
                 });
             }
@@ -415,14 +423,16 @@ mod window_management {
         }
 
         // Position focused window (left 3/4)
-        println!("[Prism] Positioning {} window to {}x{}", focused_window.owner_name, focused_width as i32, screen_height as i32);
+        // Calculate window index from window_id (format: process_id * 1000 + window_index)
+        let window_index = ((focused_window.window_id % 1000) as i32).max(1);
+        println!("[Prism] Positioning {} window #{} to {}x{}", focused_window.owner_name, window_index, focused_width as i32, screen_height as i32);
 
         let script = format!(
             r#"
             tell application "System Events"
                 tell process "{}"
                     set frontmost to true
-                    tell window 1
+                    tell window {}
                         set position to {{0, 0}}
                         set size to {{{}, {}}}
                     end tell
@@ -430,6 +440,7 @@ mod window_management {
             end tell
             "#,
             focused_window.owner_name,
+            window_index,
             focused_width as i32,
             screen_height as i32
         );
@@ -533,9 +544,9 @@ pub fn run() {
         )?;
       }
 
-      // Register global shortcut for Proceed button (Cmd+Shift+Right)
+      // Register global shortcut for Proceed button (Cmd+Enter)
       let handle = app.handle().clone();
-      app.global_shortcut().on_shortcut("CmdOrCtrl+Shift+Right", move |_app, _shortcut, event| {
+      app.global_shortcut().on_shortcut("CmdOrCtrl+Enter", move |_app, _shortcut, event| {
         if event.state == ShortcutState::Pressed {
           let _ = handle.emit("proceed-shortcut-triggered", ());
         }

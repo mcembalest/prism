@@ -178,7 +178,7 @@ export function ScreenOverlay() {
                     )}
                     <div className="text-xs text-gray-400 space-y-1">
                         {!data.isComplete && (
-                            <div>Click "Proceed" in the chat to continue</div>
+                            <div>Click "Proceed" in the chat to continue (or press <kbd>⌘+Enter</kbd>)</div>
                         )}
                         <div>ESC to close</div>
                     </div>
