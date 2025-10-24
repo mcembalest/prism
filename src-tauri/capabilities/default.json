@@ -4,8 +4,6 @@
   "description": "enables the default permissions",
   "windows": [
     "main",
-    "image-viewer",
-    "skill-graph-viewer",
     "settings",
     "screen-overlay"
   ],
