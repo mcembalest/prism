@@ -1,13 +1,201 @@
 import { useState, useRef, useEffect } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { Send } from 'lucide-react'
+import { Send, Play, Check, ArrowLeft } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { geminiService } from '@/services/gemini'
-import type { Point, BoundingBox, Message, WalkthroughStep, WalkthroughSession } from '@/types/walkthrough'
+import type { Point, BoundingBox, Message, WalkthroughStep, WalkthroughSession, PrebuiltGuide, PrebuiltGuideSession } from '@/types/walkthrough'
+
+// Hard-coded guide data
+const PREBUILT_GUIDES: PrebuiltGuide[] = [
+    {
+        id: 'review-pr',
+        title: 'How to review your teammate\'s pull request',
+        topic: 'Git Basics',
+        description: 'Learn how to review code changes in a pull request on GitHub',
+        isRecent: true,
+        steps: [
+            {
+                instruction: 'Navigate to the Pull Requests tab',
+                hint: 'Look for the "Pull requests" link in the repository navigation menu near the top of the page',
+                points: [{ x: 0.15, y: 0.08 }]
+            },
+            {
+                instruction: 'Click on the PR you want to review',
+                hint: 'Select the pull request from the list. You can filter by open, closed, or your review status',
+                points: [{ x: 0.5, y: 0.3 }]
+            },
+            {
+                instruction: 'Click the Files changed tab',
+                hint: 'This tab shows all the code changes in a diff view. You\'ll find it next to "Conversation" and "Commits"',
+                points: [{ x: 0.25, y: 0.15 }]
+            },
+            {
+                instruction: 'Review the code changes',
+                hint: 'Read through the changes. Click the + icon next to any line to leave a comment. You can suggest specific code changes',
+                boxes: [{ xMin: 0.2, yMin: 0.25, xMax: 0.8, yMax: 0.7 }]
+            },
+            {
+                instruction: 'Click the Review changes button',
+                hint: 'Find the green "Review changes" button in the top right of the Files changed view',
+                points: [{ x: 0.85, y: 0.12 }]
+            },
+            {
+                instruction: 'Add your review comment and choose review type',
+                hint: 'Write a summary comment, then select Comment, Approve, or Request changes',
+                boxes: [{ xMin: 0.6, yMin: 0.2, xMax: 0.95, yMax: 0.5 }]
+            },
+            {
+                instruction: 'Click Submit review',
+                hint: 'Your review will be posted and the PR author will be notified',
+                points: [{ x: 0.85, y: 0.52 }]
+            }
+        ]
+    },
+    {
+        id: 'init-repo',
+        title: 'Initialize a new repository',
+        topic: 'Git Basics',
+        description: 'Create a new Git repository from scratch',
+        isRecent: true,
+        isCompleted: false,
+        steps: [
+            {
+                instruction: 'Open Terminal and navigate to your project directory using cd < folder >',
+                hint: 'Use the cd command to change directories. For example: cd ~/Documents/my-project',
+                boxes: [{ xMin: 0.1, yMin: 0.1, xMax: 0.9, yMax: 0.2 }]
+            },
+            {
+                instruction: 'Run git init to initialize an empty repository',
+                hint: 'This creates a new .git subdirectory in your project with all necessary repository files',
+                boxes: [{ xMin: 0.1, yMin: 0.3, xMax: 0.9, yMax: 0.4 }]
+            },
+            {
+                instruction: 'Add files to staging with git add .',
+                hint: 'The dot (.) adds all files. You can also specify individual files',
+                boxes: [{ xMin: 0.1, yMin: 0.5, xMax: 0.9, yMax: 0.6 }]
+            },
+            {
+                instruction: 'Create your first commit with git commit -m "Initial commit"',
+                hint: 'The -m flag lets you add a commit message inline',
+                boxes: [{ xMin: 0.1, yMin: 0.7, xMax: 0.9, yMax: 0.8 }]
+            }
+        ]
+    },
+    {
+        id: 'clone-repo',
+        title: 'Clone an existing repository',
+        topic: 'Git Basics',
+        steps: [
+            {
+                instruction: 'Find the repository URL on GitHub',
+                hint: 'Click the green "Code" button and copy the HTTPS or SSH URL',
+                points: [{ x: 0.85, y: 0.2 }]
+            },
+            {
+                instruction: 'Open Terminal and navigate to where you want the repo',
+                hint: 'Use cd to navigate to your desired parent directory',
+                boxes: [{ xMin: 0.1, yMin: 0.1, xMax: 0.9, yMax: 0.2 }]
+            },
+            {
+                instruction: 'Run git clone <url>',
+                hint: 'Paste the URL you copied. This creates a new directory with the repo name',
+                boxes: [{ xMin: 0.1, yMin: 0.3, xMax: 0.9, yMax: 0.4 }]
+            }
+        ]
+    },
+    {
+        id: 'make-commit',
+        title: 'Make a commit',
+        topic: 'Git Basics',
+        steps: [
+            {
+                instruction: 'Make changes to your files',
+                hint: 'Edit, add, or delete files in your project',
+                boxes: [{ xMin: 0.1, yMin: 0.2, xMax: 0.9, yMax: 0.6 }]
+            },
+            {
+                instruction: 'Stage your changes with git add',
+                hint: 'Use git add . for all changes or git add <filename> for specific files',
+                boxes: [{ xMin: 0.1, yMin: 0.3, xMax: 0.9, yMax: 0.4 }]
+            },
+            {
+                instruction: 'Commit with git commit -m "Your message"',
+                hint: 'Write a clear, concise commit message describing what changed',
+                boxes: [{ xMin: 0.1, yMin: 0.5, xMax: 0.9, yMax: 0.6 }]
+            }
+        ]
+    },
+    {
+        id: 'push-commits',
+        title: 'Push Commits to GitHub',
+        topic: 'Git Basics',
+        steps: [
+            {
+                instruction: 'Ensure you have commits to push',
+                hint: 'Run git status to see if you have commits that aren\'t on the remote',
+                boxes: [{ xMin: 0.1, yMin: 0.2, xMax: 0.9, yMax: 0.3 }]
+            },
+            {
+                instruction: 'Run git push origin main',
+                hint: 'Replace "main" with your branch name if different. You may need to authenticate',
+                boxes: [{ xMin: 0.1, yMin: 0.4, xMax: 0.9, yMax: 0.5 }]
+            }
+        ]
+    },
+    {
+        id: 'onboarding',
+        title: 'Onboarding',
+        topic: 'Getting Started',
+        isRecent: true,
+        isCompleted: true,
+        steps: [
+            {
+                instruction: 'Welcome to the platform!',
+                hint: 'This is a sample completed guide'
+            }
+        ]
+    }
+]
+
+const TOPICS = [
+    {
+        id: 'git-basics',
+        name: 'Git Basics',
+        description: 'Learn the basics of using GitHub to collaborate on code repositories.',
+        icon: '○'
+    },
+    {
+        id: 'conflict-resolution',
+        name: 'Conflict Resolution',
+        icon: '▷'
+    },
+    {
+        id: 'branching-merging',
+        name: 'Branching and merging',
+        icon: '▷'
+    },
+    {
+        id: 'github-cli',
+        name: 'GitHub CLI',
+        icon: '▷'
+    },
+    {
+        id: 'issues-templates',
+        name: 'Issues and Templates',
+        icon: '▷'
+    }
+]
 
 export function Helper() {
+    // View management
+    type ViewType = 'landing' | 'topic' | 'activeGuide' | 'aiChat'
+    const [currentView, setCurrentView] = useState<ViewType>('landing')
+    const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
+    const [prebuiltGuideSession, setPrebuiltGuideSession] = useState<PrebuiltGuideSession | null>(null)
+
+    // Existing AI walkthrough states
     const [messages, setMessages] = useState<Message[]>([])
     const [input, setInput] = useState('')
     const [isProcessing, setIsProcessing] = useState(false)
@@ -96,6 +284,138 @@ export function Helper() {
         }
     }
 
+    // Pre-built guide handlers
+    const startPrebuiltGuide = async (guideId: string) => {
+        const guide = PREBUILT_GUIDES.find(g => g.id === guideId)
+        if (!guide) return
+
+        const session: PrebuiltGuideSession = {
+            guide,
+            currentStepIndex: 0,
+            completedSteps: new Set(),
+            isComplete: false,
+            showHint: false
+        }
+
+        setPrebuiltGuideSession(session)
+        setCurrentView('activeGuide')
+
+        // Show overlay for first step
+        const firstStep = guide.steps[0]
+        await openScreenOverlay(
+            firstStep.points || [],
+            firstStep.boxes || [],
+            guide.steps.length,
+            1,
+            firstStep.instruction,
+            guide.title,
+            false
+        )
+        overlayWindowExistsRef.current = true
+    }
+
+    const proceedPrebuiltGuide = async () => {
+        if (!prebuiltGuideSession || prebuiltGuideSession.isComplete) return
+
+        const { guide, currentStepIndex, completedSteps } = prebuiltGuideSession
+
+        // Mark current step as completed
+        const newCompletedSteps = new Set(completedSteps)
+        newCompletedSteps.add(currentStepIndex)
+
+        // Check if there are more steps
+        if (currentStepIndex + 1 < guide.steps.length) {
+            // Move to next step
+            const nextStepIndex = currentStepIndex + 1
+            const nextStep = guide.steps[nextStepIndex]
+
+            const updatedSession: PrebuiltGuideSession = {
+                ...prebuiltGuideSession,
+                currentStepIndex: nextStepIndex,
+                completedSteps: newCompletedSteps,
+                showHint: false
+            }
+
+            setPrebuiltGuideSession(updatedSession)
+
+            // Update overlay with next step
+            if (overlayWindowExistsRef.current) {
+                await invoke('update_screen_overlay_data', {
+                    points: nextStep.points || [],
+                    boxes: nextStep.boxes || [],
+                    walkthrough_steps: guide.steps.length,
+                    current_step: nextStepIndex + 1,
+                    instruction: nextStep.instruction,
+                    caption: guide.title,
+                    is_complete: false
+                })
+            }
+        } else {
+            // Guide is complete
+            const updatedSession: PrebuiltGuideSession = {
+                ...prebuiltGuideSession,
+                completedSteps: newCompletedSteps,
+                isComplete: true
+            }
+
+            setPrebuiltGuideSession(updatedSession)
+
+            // Update overlay to show completion
+            if (overlayWindowExistsRef.current) {
+                await invoke('update_screen_overlay_data', {
+                    points: [],
+                    boxes: [],
+                    walkthrough_steps: guide.steps.length,
+                    current_step: guide.steps.length,
+                    instruction: 'Guide complete!',
+                    caption: guide.title,
+                    is_complete: true
+                })
+            }
+        }
+    }
+
+    const skipPrebuiltStep = async () => {
+        if (!prebuiltGuideSession || prebuiltGuideSession.isComplete) return
+
+        const { guide, currentStepIndex } = prebuiltGuideSession
+
+        // Skip without marking complete - just move to next step
+        if (currentStepIndex + 1 < guide.steps.length) {
+            const nextStepIndex = currentStepIndex + 1
+            const nextStep = guide.steps[nextStepIndex]
+
+            const updatedSession: PrebuiltGuideSession = {
+                ...prebuiltGuideSession,
+                currentStepIndex: nextStepIndex,
+                showHint: false
+            }
+
+            setPrebuiltGuideSession(updatedSession)
+
+            // Update overlay
+            if (overlayWindowExistsRef.current) {
+                await invoke('update_screen_overlay_data', {
+                    points: nextStep.points || [],
+                    boxes: nextStep.boxes || [],
+                    walkthrough_steps: guide.steps.length,
+                    current_step: nextStepIndex + 1,
+                    instruction: nextStep.instruction,
+                    caption: guide.title,
+                    is_complete: false
+                })
+            }
+        }
+    }
+
+    const toggleHint = () => {
+        if (!prebuiltGuideSession) return
+        setPrebuiltGuideSession({
+            ...prebuiltGuideSession,
+            showHint: !prebuiltGuideSession.showHint
+        })
+    }
+
     const handleProceedToNextStep = async () => {
         const session = walkthroughSession
         console.log('[Proceed Handler] Called with state:', {
@@ -181,11 +501,22 @@ export function Helper() {
         }
     }
 
+    // Unified proceed handler that works for both pre-built and AI walkthroughs
+    const handleUnifiedProceed = async () => {
+        if (prebuiltGuideSession && currentView === 'activeGuide') {
+            // Use pre-built guide proceed
+            await proceedPrebuiltGuide()
+        } else if (walkthroughSession) {
+            // Use AI walkthrough proceed
+            await handleProceedToNextStep()
+        }
+    }
+
     // Keep the ref updated with the latest handler
     useEffect(() => {
-        proceedHandlerRef.current = handleProceedToNextStep
-        console.log('[Global Shortcut] Handler ref updated - processing:', isProcessing, 'session:', !!walkthroughSession)
-    }, [walkthroughSession, isProcessing])
+        proceedHandlerRef.current = handleUnifiedProceed
+        console.log('[Global Shortcut] Handler ref updated - view:', currentView, 'prebuilt:', !!prebuiltGuideSession, 'ai:', !!walkthroughSession)
+    }, [walkthroughSession, prebuiltGuideSession, currentView, isProcessing])
 
     const updateOverlayWithSession = async (session: WalkthroughSession) => {
         const currentStep = session.steps[session.currentStepIndex]
@@ -379,11 +710,237 @@ export function Helper() {
         }
     }
 
-    return (
+    // Render functions for different views
+    const renderLandingView = () => (
+        <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="p-6 border-b border-zinc-800/50">
+                <h1 className="text-3xl font-bold text-white text-center mb-2">Learn GitHub</h1>
+                <p className="text-sm text-zinc-400 text-center">Type a question or choose from existing guides</p>
+            </div>
+
+            <ScrollArea className="flex-1">
+                <div className="p-6 space-y-6">
+                    {/* Recent Guides */}
+                    <div>
+                        <h2 className="text-sm font-semibold text-zinc-300 mb-3">Recent Guides</h2>
+                        <div className="space-y-2">
+                            {PREBUILT_GUIDES.filter(g => g.isRecent).map(guide => (
+                                <button
+                                    key={guide.id}
+                                    onClick={() => startPrebuiltGuide(guide.id)}
+                                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 transition-all text-left"
+                                >
+                                    {guide.isCompleted ? (
+                                        <Check className="h-5 w-5 text-green-400 flex-shrink-0" />
+                                    ) : (
+                                        <Play className="h-5 w-5 text-blue-400 flex-shrink-0" />
+                                    )}
+                                    <span className="text-sm text-zinc-200">{guide.title}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Recommended Topics */}
+                    <div>
+                        <h2 className="text-sm font-semibold text-zinc-300 mb-3">Recommended Topics</h2>
+                        <div className="grid grid-cols-2 gap-2">
+                            {TOPICS.map(topic => (
+                                <button
+                                    key={topic.id}
+                                    onClick={() => {
+                                        setSelectedTopic(topic.id)
+                                        setCurrentView('topic')
+                                    }}
+                                    className="flex items-center gap-2 p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 transition-all text-left"
+                                >
+                                    <span className="text-zinc-400">{topic.icon}</span>
+                                    <span className="text-sm text-zinc-200">{topic.name}</span>
+                                </button>
+                            ))}
+                        </div>
+                        <button className="w-full mt-3 p-3 rounded-xl border border-zinc-700/50 text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all">
+                            Browse All Topics
+                        </button>
+                    </div>
+                </div>
+            </ScrollArea>
+        </div>
+    )
+
+    const renderTopicView = () => {
+        const topic = TOPICS.find(t => t.id === selectedTopic)
+        const guidesInTopic = PREBUILT_GUIDES.filter(g => g.topic === topic?.name)
+
+        return (
+            <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="p-6 border-b border-zinc-800/50">
+                    <button
+                        onClick={() => setCurrentView('landing')}
+                        className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 transition-colors mb-4"
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                        <span className="text-sm">Back</span>
+                    </button>
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className="text-2xl">{topic?.icon}</span>
+                        <h1 className="text-2xl font-bold text-white">{topic?.name}</h1>
+                    </div>
+                    {topic?.description && (
+                        <p className="text-sm text-zinc-400">{topic.description}</p>
+                    )}
+                </div>
+
+                <ScrollArea className="flex-1">
+                    <div className="p-6">
+                        <h2 className="text-sm font-semibold text-zinc-300 mb-3">Guides</h2>
+                        <div className="space-y-2">
+                            {guidesInTopic.map(guide => (
+                                <button
+                                    key={guide.id}
+                                    onClick={() => startPrebuiltGuide(guide.id)}
+                                    className="w-full flex items-center gap-3 p-4 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 transition-all text-left"
+                                >
+                                    <span className="h-2 w-2 rounded-full bg-zinc-600"></span>
+                                    <span className="text-sm text-zinc-200">{guide.title}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </ScrollArea>
+            </div>
+        )
+    }
+
+    const renderActiveGuideView = () => {
+        if (!prebuiltGuideSession) return null
+
+        const { guide, currentStepIndex, completedSteps, isComplete, showHint } = prebuiltGuideSession
+        const currentStep = guide.steps[currentStepIndex]
+        const nextStep = currentStepIndex + 1 < guide.steps.length ? guide.steps[currentStepIndex + 1] : null
+        const isCurrentStepComplete = completedSteps.has(currentStepIndex)
+
+        return (
+            <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Header with title and progress */}
+                <div className="p-6 space-y-4">
+                    <div className="flex items-center gap-3">
+                        <Play className="h-6 w-6 text-green-400" />
+                        <h1 className="text-2xl font-bold text-white">{guide.title}</h1>
+                    </div>
+
+                    {/* Progress dots */}
+                    <div className="flex items-center justify-center gap-2">
+                        {guide.steps.map((_, index) => (
+                            <div
+                                key={index}
+                                className={`h-2 w-2 rounded-full transition-all ${
+                                    index === currentStepIndex
+                                        ? 'bg-green-400 scale-125'
+                                        : index < currentStepIndex
+                                        ? 'bg-zinc-500'
+                                        : 'bg-zinc-700'
+                                }`}
+                            />
+                        ))}
+                    </div>
+                </div>
+
+                <ScrollArea className="flex-1">
+                    <div className="p-6 space-y-4">
+                        {/* Current Step */}
+                        <div className={`p-5 rounded-2xl border ${
+                            isCurrentStepComplete
+                                ? 'bg-green-900/20 border-green-700/50'
+                                : 'bg-zinc-800/80 border-zinc-700/50'
+                        }`}>
+                            <div className="flex items-start justify-between gap-3">
+                                <p className="text-sm text-zinc-100 leading-relaxed flex-1">
+                                    {currentStep.instruction}
+                                </p>
+                                {isCurrentStepComplete && (
+                                    <Check className="h-5 w-5 text-green-400 flex-shrink-0" />
+                                )}
+                            </div>
+
+                            {/* Hint section */}
+                            {currentStep.hint && showHint && (
+                                <div className="mt-3 pt-3 border-t border-zinc-700/50">
+                                    <p className="text-xs text-zinc-400">{currentStep.hint}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Next Step Preview */}
+                        {nextStep && !isComplete && (
+                            <div className="p-5 rounded-2xl bg-zinc-900/50 border border-zinc-800/50">
+                                <p className="text-sm text-zinc-400 leading-relaxed">{nextStep.instruction}</p>
+                            </div>
+                        )}
+
+                        {/* Completion message */}
+                        {isComplete && (
+                            <div className="p-5 rounded-2xl bg-green-900/20 border border-green-700/50 text-center">
+                                <Check className="h-8 w-8 text-green-400 mx-auto mb-2" />
+                                <p className="text-sm text-green-300 font-semibold">Guide Complete!</p>
+                                <button
+                                    onClick={() => {
+                                        setPrebuiltGuideSession(null)
+                                        setCurrentView('landing')
+                                    }}
+                                    className="mt-3 text-xs text-zinc-400 hover:text-zinc-200"
+                                >
+                                    Return to guides
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Hint and Skip buttons */}
+                        {!isComplete && (
+                            <div className="flex gap-3">
+                                {currentStep.hint && (
+                                    <button
+                                        onClick={toggleHint}
+                                        className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all"
+                                    >
+                                        {showHint ? 'Hide Hint' : 'Hint'}
+                                    </button>
+                                )}
+                                <button
+                                    onClick={skipPrebuiltStep}
+                                    className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all"
+                                >
+                                    Skip
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </ScrollArea>
+
+                {/* Proceed instruction */}
+                {!isComplete && (
+                    <div className="p-4 border-t border-zinc-800/50 bg-zinc-900/50">
+                        <p className="text-xs text-center text-zinc-500">
+                            Press <span className="text-zinc-400 font-mono">⌘+Enter</span> to proceed to next step
+                        </p>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    const renderAIChatView = () => (
         <div className="flex-1 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-zinc-800/50">
+                <button
+                    onClick={() => setCurrentView('landing')}
+                    className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 transition-colors mb-2"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    <span className="text-sm">Back to guides</span>
+                </button>
                 <div className="text-center space-y-1">
-                    <p className="text-sm text-zinc-400">Get help with your current workflow</p>
+                    <p className="text-sm text-zinc-400">AI-powered walkthrough</p>
                 </div>
             </div>
             <div className="flex-1 overflow-hidden">
@@ -403,24 +960,24 @@ export function Helper() {
                                                     : 'bg-zinc-800/80 text-gray-100 border border-zinc-700/50'
                                                 }`}
                                         >
-                                    <p className="text-sm leading-relaxed">{message.content}</p>
-                                </div>
-                            </div>
+                                            <p className="text-sm leading-relaxed">{message.content}</p>
+                                        </div>
+                                    </div>
 
-                            {/* Proceed button for walkthrough - shown below last message */}
-                            {isLastMessage && walkthroughSession && !walkthroughSession.isComplete && (
-                                <div className="flex justify-start mt-2 ml-1">
-                                    <button
-                                        onClick={handleProceedToNextStep}
-                                        disabled={isProcessing}
-                                        className="text-sm text-purple-400 hover:text-purple-300 underline decoration-2 underline-offset-4 disabled:opacity-50 disabled:cursor-not-allowed transition-colors bg-purple-500/10 hover:bg-purple-500/20 px-2 py-1 rounded"
-                                    >
-                                        {isProcessing ? 'Processing...' : 'Proceed (⌘+Enter)'}
-                                    </button>
+                                    {/* Proceed button for walkthrough - shown below last message */}
+                                    {isLastMessage && walkthroughSession && !walkthroughSession.isComplete && (
+                                        <div className="flex justify-start mt-2 ml-1">
+                                            <button
+                                                onClick={handleProceedToNextStep}
+                                                disabled={isProcessing}
+                                                className="text-sm text-purple-400 hover:text-purple-300 underline decoration-2 underline-offset-4 disabled:opacity-50 disabled:cursor-not-allowed transition-colors bg-purple-500/10 hover:bg-purple-500/20 px-2 py-1 rounded"
+                                            >
+                                                {isProcessing ? 'Processing...' : 'Proceed (⌘+Enter)'}
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                    )
+                            )
                         })}
                     </div>
                 </ScrollArea>
@@ -499,5 +1056,49 @@ export function Helper() {
                 </div>
             </div>
         </div>
+    )
+
+    // Conditional rendering based on current view
+    return (
+        <>
+            {currentView === 'landing' && renderLandingView()}
+            {currentView === 'topic' && renderTopicView()}
+            {currentView === 'activeGuide' && renderActiveGuideView()}
+            {currentView === 'aiChat' && renderAIChatView()}
+
+            {/* Input box shown on landing view */}
+            {currentView === 'landing' && (
+                <div className="p-4 border-t border-zinc-800/50 bg-zinc-900/50 backdrop-blur space-y-3">
+                    <div className="flex gap-2">
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && input.trim()) {
+                                    setCurrentView('aiChat')
+                                    handleSend()
+                                }
+                            }}
+                            placeholder="Type a question..."
+                            className="flex-1 bg-zinc-800/80 text-white placeholder:text-zinc-500 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                        />
+                        <Button
+                            onClick={() => {
+                                if (input.trim()) {
+                                    setCurrentView('aiChat')
+                                    handleSend()
+                                }
+                            }}
+                            disabled={!input.trim()}
+                            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20 rounded-xl px-4 transition-all"
+                        >
+                            <Send className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+            )}
+        </>
     )
 }

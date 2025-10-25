@@ -62,3 +62,29 @@ export interface Message {
 }
 
 export type IntentType = 'query' | 'point' | 'detect' | 'walkthrough' | 'text-only'
+
+// Pre-built guide types
+export interface PrebuiltStep {
+  instruction: string
+  hint?: string
+  points?: Point[]
+  boxes?: BoundingBox[]
+}
+
+export interface PrebuiltGuide {
+  id: string
+  title: string
+  topic: string
+  description?: string
+  steps: PrebuiltStep[]
+  isRecent?: boolean
+  isCompleted?: boolean
+}
+
+export interface PrebuiltGuideSession {
+  guide: PrebuiltGuide
+  currentStepIndex: number
+  completedSteps: Set<number>
+  isComplete: boolean
+  showHint: boolean
+}
