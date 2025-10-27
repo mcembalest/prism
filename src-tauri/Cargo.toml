@@ -1,7 +1,7 @@
 [package]
-name = "Prism"
+name = "HelpLayer"
 version = "0.1.0"
-description = "Prism"
+description = "HelpLayer"
 authors = ["Max Cembalest"]
 license = ""
 repository = ""

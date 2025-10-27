@@ -38,7 +38,7 @@ function dataUrlToInlineData(dataUrl: string): { mimeType: string; data: string 
 
 function getGeminiApiKey(): string {
   try {
-    return localStorage.getItem('prism_gemini_api_key') || ''
+    return localStorage.getItem('helplayer_gemini_api_key') || ''
   } catch {
     return ''
   }

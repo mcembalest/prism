@@ -12,7 +12,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 // If no API key is set, prompt user by opening Settings
 try {
-  const hasKey = localStorage.getItem('prism_gemini_api_key')
+  const hasKey = localStorage.getItem('helplayer_gemini_api_key')
   if (!hasKey) {
     invoke('open_settings_window').catch(() => {})
   }
