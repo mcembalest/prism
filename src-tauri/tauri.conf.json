@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "HelpLayer",
+  "productName": "Lighthouse",
   "version": "0.1.0",
-  "identifier": "com.helplayer.desktop",
+  "identifier": "com.Lighthouse.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "HelpLayer",
+        "title": "Lighthouse",
         "width": 400,
         "height": 400,
         "resizable": true,

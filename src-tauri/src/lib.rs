@@ -160,7 +160,7 @@ async fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
         "settings",
         WebviewUrl::App("settings.html".into())
     )
-    .title("HelpLayer Settings")
+    .title("Lighthouse Settings")
     .inner_size(560.0, 420.0)
     .resizable(true)
     .decorations(false)
@@ -292,7 +292,7 @@ mod window_management {
 
         if !permission_check.status.success() {
             let error_msg = String::from_utf8_lossy(&permission_check.stderr);
-            return Err(format!("Accessibility permissions required. Please grant HelpLayer access in System Settings → Privacy & Security → Accessibility. Error: {}", error_msg));
+            return Err(format!("Accessibility permissions required. Please grant Lighthouse access in System Settings → Privacy & Security → Accessibility. Error: {}", error_msg));
         }
 
         // Use AppleScript to get window list - iterate through ALL windows for each process
@@ -302,7 +302,7 @@ mod window_management {
                 set allProcesses to every process whose background only is false
                 repeat with proc in allProcesses
                     set procName to name of proc
-                    if procName is not "HelpLayer" then
+                    if procName is not "Lighthouse" then
                         set procID to unix id of proc
                         set winList to windows of proc
                         if (count of winList) > 0 then
@@ -330,7 +330,7 @@ mod window_management {
 
         let stderr = String::from_utf8_lossy(&output.stderr);
         if !stderr.is_empty() {
-            println!("[HelpLayer] AppleScript stderr: {:?}", stderr);
+            println!("[Lighthouse] AppleScript stderr: {:?}", stderr);
         }
 
         if !output.status.success() {
@@ -338,7 +338,7 @@ mod window_management {
         }
 
         let result = String::from_utf8_lossy(&output.stdout);
-        println!("[HelpLayer] AppleScript output: {:?}", result);
+        println!("[Lighthouse] AppleScript output: {:?}", result);
 
         // Parse the AppleScript result - format is: app1|window1|pid1|winID1\napp2|window2|pid2|winID2\n...
         let mut windows = Vec::new();
@@ -356,7 +356,7 @@ mod window_management {
                 let process_id = parts[2].trim().parse::<i32>().unwrap_or(0);
                 let window_id = parts[3].trim().parse::<i64>().unwrap_or(0);
 
-                println!("[HelpLayer] Found window: {} - {} (PID: {}, WinID: {})", owner_name, window_name, process_id, window_id);
+                println!("[Lighthouse] Found window: {} - {} (PID: {}, WinID: {})", owner_name, window_name, process_id, window_id);
 
                 windows.push(FocusedWindowInfo {
                     owner_name,
@@ -367,15 +367,15 @@ mod window_management {
             }
         }
 
-        println!("[HelpLayer] Total windows found: {}", windows.len());
+        println!("[Lighthouse] Total windows found: {}", windows.len());
         Ok(windows)
     }
 
     pub fn arrange_windows(
         focused_window: &FocusedWindowInfo,
-        _helplayer_window: &WebviewWindow
+        _Lighthouse_window: &WebviewWindow
     ) -> Result<(), String> {
-        println!("[HelpLayer] Starting window arrangement for: {}", focused_window.owner_name);
+        println!("[Lighthouse] Starting window arrangement for: {}", focused_window.owner_name);
 
         // Get screen dimensions
         let screens = Screen::all().map_err(|e| e.to_string())?;
@@ -384,19 +384,19 @@ mod window_management {
         let screen_width = screen.display_info.width as f64;
         let screen_height = screen.display_info.height as f64;
 
-        println!("[HelpLayer] Screen dimensions: {}x{}", screen_width, screen_height);
+        println!("[Lighthouse] Screen dimensions: {}x{}", screen_width, screen_height);
 
         // Calculate dimensions
         let focused_width = screen_width * 0.75;
-        let helplayer_width = screen_width * 0.25;
+        let Lighthouse_width = screen_width * 0.25;
 
-        println!("[HelpLayer] Resizing HelpLayer window to {}x{} at position ({}, 0)", helplayer_width, screen_height, focused_width);
+        println!("[Lighthouse] Resizing Lighthouse window to {}x{} at position ({}, 0)", Lighthouse_width, screen_height, focused_width);
 
-        // Use AppleScript to move HelpLayer window (same approach that works for Chrome/Cursor)
-        let helplayer_script = format!(
+        // Use AppleScript to move Lighthouse window (same approach that works for Chrome/Cursor)
+        let Lighthouse_script = format!(
             r#"
             tell application "System Events"
-                tell process "HelpLayer"
+                tell process "Lighthouse"
                     tell window 1
                         set position to {{{}, 0}}
                         set size to {{{}, {}}}
@@ -405,27 +405,27 @@ mod window_management {
             end tell
             "#,
             focused_width as i32,
-            helplayer_width as i32,
+            Lighthouse_width as i32,
             screen_height as i32
         );
 
-        let helplayer_output = std::process::Command::new("osascript")
+        let Lighthouse_output = std::process::Command::new("osascript")
             .arg("-e")
-            .arg(&helplayer_script)
+            .arg(&Lighthouse_script)
             .output()
-            .map_err(|e| format!("Failed to execute AppleScript for HelpLayer: {}", e))?;
+            .map_err(|e| format!("Failed to execute AppleScript for Lighthouse: {}", e))?;
 
-        if !helplayer_output.status.success() {
-            let error = String::from_utf8_lossy(&helplayer_output.stderr);
-            println!("[HelpLayer] AppleScript error for HelpLayer window: {}", error);
+        if !Lighthouse_output.status.success() {
+            let error = String::from_utf8_lossy(&Lighthouse_output.stderr);
+            println!("[Lighthouse] AppleScript error for Lighthouse window: {}", error);
         } else {
-            println!("[HelpLayer] HelpLayer window repositioned via AppleScript");
+            println!("[Lighthouse] Lighthouse window repositioned via AppleScript");
         }
 
         // Position focused window (left 3/4)
         // Calculate window index from window_id (format: process_id * 1000 + window_index)
         let window_index = ((focused_window.window_id % 1000) as i32).max(1);
-        println!("[HelpLayer] Positioning {} window #{} to {}x{}", focused_window.owner_name, window_index, focused_width as i32, screen_height as i32);
+        println!("[Lighthouse] Positioning {} window #{} to {}x{}", focused_window.owner_name, window_index, focused_width as i32, screen_height as i32);
 
         let script = format!(
             r#"
@@ -453,11 +453,11 @@ mod window_management {
 
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr);
-            println!("[HelpLayer] AppleScript error: {}", error);
+            println!("[Lighthouse] AppleScript error: {}", error);
             return Err(format!("Failed to position window: {}", error));
         }
 
-        println!("[HelpLayer] Window arrangement completed successfully");
+        println!("[Lighthouse] Window arrangement completed successfully");
         Ok(())
     }
 }
@@ -475,10 +475,10 @@ async fn arrange_windows(
     state: tauri::State<'_, AppState>,
     window_info: FocusedWindowInfo
 ) -> Result<(), String> {
-    let helplayer_window = app.get_webview_window("main")
-        .ok_or("Could not find HelpLayer main window")?;
+    let Lighthouse_window = app.get_webview_window("main")
+        .ok_or("Could not find Lighthouse main window")?;
 
-    window_management::arrange_windows(&window_info, &helplayer_window)?;
+    window_management::arrange_windows(&window_info, &Lighthouse_window)?;
 
     // Save to state and disk
     *state.focused_window.lock().unwrap() = Some(window_info.clone());
@@ -558,7 +558,7 @@ pub fn run() {
           .id("settings")
           .accelerator("Cmd+,")
           .build(app)?;
-        let app_menu = SubmenuBuilder::new(app, "HelpLayer")
+        let app_menu = SubmenuBuilder::new(app, "Lighthouse")
           .item(&settings)
           .build()?;
         let menu = MenuBuilder::new(app)
@@ -585,29 +585,29 @@ pub fn run() {
 
         // Try to load saved focus window
         if let Some(saved_window) = AppState::load_from_disk(&app_handle) {
-          println!("[HelpLayer] Found saved window: {:?}", saved_window);
+          println!("[Lighthouse] Found saved window: {:?}", saved_window);
           *state.focused_window.lock().unwrap() = Some(saved_window.clone());
 
           // Try to arrange windows on startup
-          let helplayer_window_result = app_handle.get_webview_window("main");
-          if let Some(helplayer_window) = helplayer_window_result {
+          let Lighthouse_window_result = app_handle.get_webview_window("main");
+          if let Some(Lighthouse_window) = Lighthouse_window_result {
             // Small delay to ensure window is fully initialized
             let saved_window_clone = saved_window.clone();
             tauri::async_runtime::spawn(async move {
               tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-              println!("[HelpLayer] Attempting auto-arrangement...");
-              match window_management::arrange_windows(&saved_window_clone, &helplayer_window) {
-                Ok(_) => println!("[HelpLayer] Auto-arrangement successful"),
-                Err(e) => println!("[HelpLayer] Auto-arrangement failed: {}", e),
+              println!("[Lighthouse] Attempting auto-arrangement...");
+              match window_management::arrange_windows(&saved_window_clone, &Lighthouse_window) {
+                Ok(_) => println!("[Lighthouse] Auto-arrangement successful"),
+                Err(e) => println!("[Lighthouse] Auto-arrangement failed: {}", e),
               }
             });
           }
         } else {
-          println!("[HelpLayer] No saved window found, entering selection mode");
+          println!("[Lighthouse] No saved window found, entering selection mode");
           *state.selection_mode.lock().unwrap() = true;
           match app_handle.emit("selection-mode-changed", true) {
-            Ok(_) => println!("[HelpLayer] Emitted selection-mode-changed: true"),
-            Err(e) => println!("[HelpLayer] Failed to emit selection-mode-changed: {}", e),
+            Ok(_) => println!("[Lighthouse] Emitted selection-mode-changed: true"),
+            Err(e) => println!("[Lighthouse] Failed to emit selection-mode-changed: {}", e),
           }
         }
       }

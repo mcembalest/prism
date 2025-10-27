@@ -5,7 +5,7 @@ import { Helper } from './helper'
 import { SelectionBanner } from './SelectionBanner'
 import { listen } from '@tauri-apps/api/event'
 
-export function HelpLayerContainer() {
+export function LighthouseContainer() {
     const [isSelectionMode, setIsSelectionMode] = useState(false)
 
     useEffect(() => {
@@ -16,15 +16,15 @@ export function HelpLayerContainer() {
             try {
                 const { invoke } = await import('@tauri-apps/api/core')
                 const initialMode = await invoke<boolean>('get_focus_selection_mode')
-                console.log('[HelpLayerContainer] Initial selection mode:', initialMode)
+                console.log('[LighthouseContainer] Initial selection mode:', initialMode)
                 setIsSelectionMode(initialMode)
             } catch (err) {
-                console.error('[HelpLayerContainer] Failed to get initial selection mode:', err)
+                console.error('[LighthouseContainer] Failed to get initial selection mode:', err)
             }
 
             // Listen for changes
             unlisten = await listen<boolean>('selection-mode-changed', (event) => {
-                console.log('[HelpLayerContainer] Selection mode changed:', event.payload)
+                console.log('[LighthouseContainer] Selection mode changed:', event.payload)
                 setIsSelectionMode(event.payload)
             })
         }

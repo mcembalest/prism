@@ -34,7 +34,7 @@ export function DraggableHeader() {
         data-tauri-drag-region
         className="flex items-center gap-2 flex-1 select-none"
       >
-        <span className="text-xs font-semibold text-white/90">HelpLayer</span>
+        <span className="text-xs font-semibold text-white/90">Lighthouse</span>
       </div>
 
       <div className="flex items-center gap-1">

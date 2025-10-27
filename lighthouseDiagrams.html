@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HelpLayer Architecture</title>
+    <title>Lighthouse</title>
     <script type="module">
         import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
         
@@ -64,65 +64,6 @@
         };
         
         mermaid.initialize(mermaidConfig);
-        
-        // Wait for Mermaid to render all diagrams
-        document.addEventListener('DOMContentLoaded', () => {
-            setTimeout(() => {
-                setupFullscreenHandlers();
-            }, 1000);
-        });
-        
-        function setupFullscreenHandlers() {
-            const diagrams = document.querySelectorAll('.diagram-card');
-            diagrams.forEach(diagram => {
-                diagram.style.cursor = 'pointer';
-                diagram.addEventListener('click', () => {
-                    openFullscreen(diagram);
-                });
-            });
-        }
-        
-        function openFullscreen(diagram) {
-            const modal = document.createElement('div');
-            modal.className = 'fullscreen-modal';
-            
-            const closeBtn = document.createElement('button');
-            closeBtn.className = 'close-btn';
-            closeBtn.innerHTML = '✕';
-            closeBtn.onclick = () => {
-                modal.remove();
-                document.body.style.overflow = '';
-            };
-            
-            const content = diagram.cloneNode(true);
-            content.style.transform = 'none';
-            content.style.boxShadow = 'none';
-            content.style.margin = '0';
-            content.style.width = '100%';
-            content.style.height = '100%';
-            content.style.borderRadius = '0';
-            content.style.cursor = 'default';
-            
-            // Remove the "Click to expand" pseudo-element hint
-            content.addEventListener('mouseenter', () => {}, { once: true });
-            
-            modal.appendChild(closeBtn);
-            modal.appendChild(content);
-            document.body.appendChild(modal);
-            
-            // Prevent scroll on body
-            document.body.style.overflow = 'hidden';
-            
-            // Close on escape key
-            const handleEscape = (e) => {
-                if (e.key === 'Escape') {
-                    modal.remove();
-                    document.body.style.overflow = '';
-                    document.removeEventListener('keydown', handleEscape);
-                }
-            };
-            document.addEventListener('keydown', handleEscape);
-        }
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -187,121 +128,6 @@
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             overflow: hidden;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-        
-        .diagram-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.4);
-        }
-        
-        .diagram-card:active {
-            transform: translateY(-2px);
-        }
-        
-        .diagram-card::after {
-            content: 'Click to expand';
-            position: absolute;
-            bottom: 20px;
-            right: 32px;
-            background: rgba(79, 70, 229, 0.9);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: 500;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            pointer-events: none;
-        }
-        
-        .diagram-card:hover::after {
-            opacity: 1;
-        }
-        
-        /* Fullscreen Modal */
-        .fullscreen-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.95);
-            z-index: 10000;
-            display: flex;
-            flex-direction: column;
-            padding: 40px;
-            animation: fadeIn 0.2s ease;
-            overflow: hidden;
-        }
-        
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
-        }
-        
-        .close-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            font-size: 24px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-            z-index: 10001;
-        }
-        
-        .close-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: rgba(255, 255, 255, 0.5);
-            transform: scale(1.1);
-        }
-        
-        .fullscreen-modal .diagram-card {
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        
-        .fullscreen-modal .diagram-header {
-            flex-shrink: 0;
-        }
-        
-        .fullscreen-modal .diagram-content {
-            flex: 1;
-            overflow: auto;
-            padding: 40px;
-        }
-        
-        .fullscreen-modal .mermaid {
-            background: white;
-            padding: 40px;
-            min-height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .fullscreen-modal .mermaid svg {
-            max-width: 100%;
-            height: auto;
-        }
-        
-        .fullscreen-modal .diagram-card::after {
-            display: none;
         }
         
         .diagram-header {
@@ -327,7 +153,7 @@
             background: #FAFAFA;
             overflow-x: hidden;
             overflow-y: auto;
-            height: 380px; /* equalized height for both diagrams */
+            height: 1000px; /* equalized height for both diagrams */
         }
         
         .mermaid {
@@ -370,6 +196,15 @@
             stroke-width: 2px;
         }
         
+        /* Top diagram specific styles */
+        .top-diagram .mermaid .edgeLabel {
+            font-size: 5px !important;
+            border: 2px solid #4F46E5 !important;
+            border-radius: 20px !important;
+            background-color: white !important;
+            padding: 6px 2px !important;
+        }
+        
         @media (max-width: 1100px) {
             .diagrams-grid {
                 grid-template-columns: 1fr;
@@ -405,7 +240,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>HelpLayer</h1>
+            <h1>Lighthouse</h1>
             <h2>In-product customer guidance</h2>
         </div>
         
@@ -413,38 +248,24 @@
         <div class="top-diagram">
             <div class="diagram-card">
                 <div class="diagram-header">
-                    <h2>Where HelpLayer sits relative to your product</h2>
+                    <h2>Where Lighthouse sits relative to your product</h2>
                 </div>
                 <div class="diagram-content">
                     <div class="mermaid">
 flowchart LR
-    User[👤 User]
+    User[User]
+    Prod[Product]
+    HL[Lighthouse]
+    KB[(Product<br/>Knowledge)]
     
-    subgraph Product["Your Product"]
-        direction TB
-        UI[UI Layer]
-        Backend[Backend/API]
-        UI ---|data| Backend
-    end
+    User -->|uses| Prod
+    Prod -.->|optionally emits events to| HL
+    HL -->|Observes UI/DOM of| Prod
+    HL -->|queries| KB
+    HL -->|provides help to| User
     
-    subgraph SG["HelpLayer Panel"]
-        direction TB
-        Capture[Context Capture]
-        Steps[Multi-Step Guide]
-        Detection[Step Completion]
-        Capture --> Steps --> Detection
-    end
-    
-    KB[(Product Knowledge Base)]
-    
-    User -->|works in| Product
-    Product ---|observes| SG
-    User -.->|shortcut key| SG
-    
-    SG <-->|queries| KB
-    
-    style SG fill:#EEF2FF,stroke:#4F46E5,stroke-width:3px
-    style Product fill:#F9FAFB,stroke:#9CA3AF,stroke-width:2px
+    style HL fill:#EEF2FF,stroke:#4F46E5,stroke-width:3px
+    style Prod fill:#F9FAFB,stroke:#9CA3AF,stroke-width:2px
     style KB fill:#FEF3C7,stroke:#F59E0B,stroke-width:2px
                     </div>
                 </div>
@@ -455,35 +276,40 @@ flowchart LR
             <!-- Flowchart -->
             <div class="diagram-card">
                 <div class="diagram-header">
-                    <h2>User Journey: ask for help -> complete guide</h2>
+                    <h2>User Journey of requesting to receiving help</h2>
                 </div>
                 <div class="diagram-content">
                     <div class="mermaid">
 flowchart TD
-    Start([User presses shortcut key]) --> Open[HelpLayer panel opens]
-    
-    Open --> Landing[Show landing page<br/>Recent Guides + Topics]
-    
-    Landing --> Choice{User action}
-    Choice -->|Types question| Question[Answer contextually]
+    Start([User asks for help]) --> Open[Lighthouse opens with suggested guides]
+
+    Open --> Choice{User action}
+    Choice -->|Asks a question| Question[Answer contextually]
     Choice -->|Selects topic| Topic[Show topic guides]
-    Choice -->|Selects recent| Guide
+    Choice -->|Selects recent guide| Guide
     
-    Topic --> Guide[Show step-by-step guide]
+    Question --> OfferGuide{Want a guide<br/>for this?}
+    OfferGuide -->|Yes| Guide
+    OfferGuide -->|No| Done
     
-    Guide --> Step1[Display Step 1]
-    Step1 --> Monitor[Monitor for completion]
+    Topic --> Guide[Start step-by-step guide]
     
-    Monitor --> Check{Step complete?}
+    Guide --> DisplayStep[Display Step]
+    DisplayStep --> Monitor[Monitor for checkpoint completion]
+    
+    Monitor --> Check{Checkpoint reached?}
     Check -->|Yes ✓| Next{More steps?}
-    Check -->|No| Hint[Show hint/skip option]
-    Hint --> Monitor
+    Check -->|No| Options{User chooses}
     
-    Next -->|Yes| StepN[Display next step]
-    StepN --> Monitor
-    Next -->|No| Done([Guide completed!])
+    Options -->|View hint| UpdateStep[Update step display<br/>with hint]
+    Options -->|Skip step| SkipCheck{Skip feasible?}
     
-    Question --> Done
+    UpdateStep --> Monitor
+    SkipCheck -->|Yes| Next
+    SkipCheck -->|No| Monitor
+    
+    Next -->|Yes| DisplayStep
+    Next -->|No| Done([Lighthouse closes])
                     </div>
                 </div>
             </div>
@@ -491,44 +317,85 @@ flowchart TD
             <!-- Sequence Diagram -->
             <div class="diagram-card">
                 <div class="diagram-header">
-                    <h2>System Component Flow & Interactions</h2>
+                    <h2>Sequence of Lighthouse system interactions</h2>
                 </div>
                 <div class="diagram-content">
                     <div class="mermaid">
 sequenceDiagram
-    actor User
-    participant Product
-    participant HelpLayer
-    participant KB as Product Knowledge Base
+    actor U as User
+    participant P as Product
+    participant HL as Lighthouse
+    participant KB as Product Knowledge
 
-    User->>Product: Working in product
-    User->>HelpLayer: Ask for help
+    U->>P: Working in product
+    U->>HL: Request help
+    Note over HL,P: Lighthouse observes current page/context
+    HL->>KB: Query for suggested guides & topics
+    KB-->>HL: Return guides/topics
+    HL->>U: Display suggestions
     
-    HelpLayer->>Product: Capture context<br/>(screenshot, DOM, state)
-    Product-->>HelpLayer: Current state
-    
-    HelpLayer->>KB: Query
-    KB-->>HelpLayer: Workflows & docs
-    
-    HelpLayer->>User: Show landing page<br/>(Recent + Topics)
-    
-    User->>HelpLayer: Select guide
-    HelpLayer->>User: Display Step 1 with<br/>success criteria
-    
-    loop Each Step
-        User->>Product: Perform action
-        HelpLayer->>Product: Monitor for completion
+    alt User asks question
+        U->>HL: Type question
+        HL->>KB: Query for contextual answer
+        KB-->>HL: Return answer
+        HL->>U: Display answer & offer guide
         
-        alt Step completed
-            Product-->>HelpLayer: Success detected
-            HelpLayer->>User: Show checkmark ✓<br/>Display next step
-        else Step stuck
-            User->>HelpLayer: Request hint
-            HelpLayer->>User: Show hint or<br/>Skip option
+        alt User wants guide
+            U->>HL: Accept guide offer
+            HL->>KB: Fetch guide steps
+            KB-->>HL: Return step-by-step guide
+            Note over U,KB: Continue to guide flow below
+        else No guide needed
+            U->>HL: Dismiss
+            Note over HL: Session ends
         end
+        
+    else User selects guide/topic
+        U->>HL: Select guide or topic
+        HL->>KB: Fetch guide steps
+        KB-->>HL: Return step-by-step guide
+        
+        loop Each Step
+            HL->>U: Display step instructions
+            U->>P: Perform action in product
+            Note over HL,P: Lighthouse continuously observes<br/>Product UI/DOM
+            
+            alt Checkpoint reached
+                alt via passive observation
+                    HL->>P: Check UI/DOM state
+                    P-->>HL: UI state matches checkpoint
+                    HL->>U: Show completion ✓
+                else via optional event integration
+                    P->>HL: Emit completion event
+                    HL->>U: Show completion ✓
+                end
+            else Checkpoint not yet reached
+                alt User requests hint
+                    U->>HL: Request hint
+                    HL->>KB: Query for hint
+                    KB-->>HL: Return hint
+                    HL->>U: Display hint
+                    Note over HL: Continue monitoring
+                else User tries to skip
+                    U->>HL: Request skip step
+                    HL->>KB: Check step dependencies
+                    KB-->>HL: Return skip feasibility
+                    HL->>P: Check current state
+                    P-->>HL: Return state info
+                    alt Skip allowed
+                        HL->>U: Skip to next step
+                    else Skip not feasible
+                        HL->>U: Must complete this step
+                        Note over HL: Continue monitoring
+                    end
+                else User continues trying
+                    Note over HL: Continue monitoring
+                end
+            end
+        end
+        
+        HL->>U: Guide completed!
     end
-    
-    HelpLayer->>User: Guide completed!
                     </div>
                 </div>
             </div>

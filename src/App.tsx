@@ -1,9 +1,9 @@
-import { HelpLayerContainer } from './components/HelpLayerContainer'
+import { LighthouseContainer } from './components/LighthouseContainer'
 
 function App() {
   return (
     <div className="h-screen w-full bg-transparent dark">
-      <HelpLayerContainer />
+      <LighthouseContainer />
     </div>
   )
 }

@@ -1,13 +1,13 @@
-# HelpLayer
+# Lighthouse
 
-HelpLayer delivers step-by-step in-product walkthroughs, helping your users know what to do and where to go on their screen.
+Lighthouse delivers step-by-step in-product walkthroughs, helping your users know what to do and where to go on their screen.
 
 ## Quick Start
 
 1. **Install Rust**: https://rust-lang.org/tools/install/
 2. **Install dependencies**: `npm install`
 3. **Run the app**: `npm run tauri dev`
-4. **Add API key:** Open `HelpLayer > Settings` and add a [Gemini API key](https://aistudio.google.com/app/api-keys)
+4. **Add API key:** Open `Lighthouse > Settings` and add a [Gemini API key](https://aistudio.google.com/app/api-keys)
 
 ## How this is built
 
