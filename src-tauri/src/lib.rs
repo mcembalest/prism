@@ -4,6 +4,8 @@ use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
+use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState};
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
 
 // Focused Window State Management
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -517,6 +519,17 @@ async fn get_focused_window(state: tauri::State<'_, AppState>) -> Result<Option<
     Ok(state.focused_window.lock().unwrap().clone())
 }
 
+#[tauri::command]
+async fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+        Ok(())
+    } else {
+        Err("Main window not found".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -533,9 +546,14 @@ pub fn run() {
       start_focus_selection_mode,
       stop_focus_selection_mode,
       get_focus_selection_mode,
-      get_focused_window
+      get_focused_window,
+      show_main_window
     ])
     .setup(|app| {
+      // Hide Dock icon on macOS
+      #[cfg(target_os = "macos")]
+      app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
@@ -551,9 +569,12 @@ pub fn run() {
           let _ = handle.emit("proceed-shortcut-triggered", ());
         }
       })?;
+      
       #[cfg(target_os = "macos")]
       {
-        use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+        use tauri::menu::SubmenuBuilder;
+        
+        // Create application menu (for when app is visible)
         let settings = MenuItemBuilder::new("Settings…")
           .id("settings")
           .accelerator("Cmd+,")
@@ -575,40 +596,43 @@ pub fn run() {
             });
           }
         });
-      }
 
-      // Auto-arrangement on startup
-      #[cfg(target_os = "macos")]
-      {
+        // Build tray icon (no menu, just click to launch)
+        let _tray = TrayIconBuilder::new()
+          .icon(app.default_window_icon().unwrap().clone())
+          .tooltip("Lighthouse")
+          .on_tray_icon_event(|tray, event| {
+            if let tauri::tray::TrayIconEvent::Click {
+              button: MouseButton::Left,
+              button_state: MouseButtonState::Up,
+              ..
+            } = event {
+              let app = tray.app_handle().clone();
+              tauri::async_runtime::spawn(async move {
+                let _ = show_main_window(app).await;
+              });
+            }
+          })
+          .build(app)?;
+
+        // Load saved window state but don't auto-arrange
         let app_handle = app.handle().clone();
         let state = app.state::<AppState>();
-
-        // Try to load saved focus window
         if let Some(saved_window) = AppState::load_from_disk(&app_handle) {
           println!("[Lighthouse] Found saved window: {:?}", saved_window);
           *state.focused_window.lock().unwrap() = Some(saved_window.clone());
+        }
 
-          // Try to arrange windows on startup
-          let Lighthouse_window_result = app_handle.get_webview_window("main");
-          if let Some(Lighthouse_window) = Lighthouse_window_result {
-            // Small delay to ensure window is fully initialized
-            let saved_window_clone = saved_window.clone();
-            tauri::async_runtime::spawn(async move {
-              tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-              println!("[Lighthouse] Attempting auto-arrangement...");
-              match window_management::arrange_windows(&saved_window_clone, &Lighthouse_window) {
-                Ok(_) => println!("[Lighthouse] Auto-arrangement successful"),
-                Err(e) => println!("[Lighthouse] Auto-arrangement failed: {}", e),
-              }
-            });
-          }
-        } else {
-          println!("[Lighthouse] No saved window found, entering selection mode");
-          *state.selection_mode.lock().unwrap() = true;
-          match app_handle.emit("selection-mode-changed", true) {
-            Ok(_) => println!("[Lighthouse] Emitted selection-mode-changed: true"),
-            Err(e) => println!("[Lighthouse] Failed to emit selection-mode-changed: {}", e),
-          }
+        // Set up window close handler to hide instead of exit
+        if let Some(main_window) = app.get_webview_window("main") {
+          let window_clone = main_window.clone();
+          main_window.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+              // Prevent the window from closing and hide it instead
+              api.prevent_close();
+              let _ = window_clone.hide();
+            }
+          });
         }
       }
 
