@@ -375,7 +375,7 @@ mod window_management {
 
     pub fn arrange_windows(
         focused_window: &FocusedWindowInfo,
-        _Lighthouse_window: &WebviewWindow
+        _lighthouse_window: &WebviewWindow
     ) -> Result<(), String> {
         println!("[Lighthouse] Starting window arrangement for: {}", focused_window.owner_name);
 
@@ -390,12 +390,12 @@ mod window_management {
 
         // Calculate dimensions
         let focused_width = screen_width * 0.75;
-        let Lighthouse_width = screen_width * 0.25;
+        let lighthouse_width = screen_width * 0.25;
 
-        println!("[Lighthouse] Resizing Lighthouse window to {}x{} at position ({}, 0)", Lighthouse_width, screen_height, focused_width);
+        println!("[Lighthouse] Resizing Lighthouse window to {}x{} at position ({}, 0)", lighthouse_width, screen_height, focused_width);
 
         // Use AppleScript to move Lighthouse window (same approach that works for Chrome/Cursor)
-        let Lighthouse_script = format!(
+        let lighthouse_script = format!(
             r#"
             tell application "System Events"
                 tell process "Lighthouse"
@@ -407,18 +407,18 @@ mod window_management {
             end tell
             "#,
             focused_width as i32,
-            Lighthouse_width as i32,
+            lighthouse_width as i32,
             screen_height as i32
         );
 
-        let Lighthouse_output = std::process::Command::new("osascript")
+        let lighthouse_output = std::process::Command::new("osascript")
             .arg("-e")
-            .arg(&Lighthouse_script)
+            .arg(&lighthouse_script)
             .output()
             .map_err(|e| format!("Failed to execute AppleScript for Lighthouse: {}", e))?;
 
-        if !Lighthouse_output.status.success() {
-            let error = String::from_utf8_lossy(&Lighthouse_output.stderr);
+        if !lighthouse_output.status.success() {
+            let error = String::from_utf8_lossy(&lighthouse_output.stderr);
             println!("[Lighthouse] AppleScript error for Lighthouse window: {}", error);
         } else {
             println!("[Lighthouse] Lighthouse window repositioned via AppleScript");
@@ -477,10 +477,10 @@ async fn arrange_windows(
     state: tauri::State<'_, AppState>,
     window_info: FocusedWindowInfo
 ) -> Result<(), String> {
-    let Lighthouse_window = app.get_webview_window("main")
+    let lighthouse_window = app.get_webview_window("main")
         .ok_or("Could not find Lighthouse main window")?;
 
-    window_management::arrange_windows(&window_info, &Lighthouse_window)?;
+    window_management::arrange_windows(&window_info, &lighthouse_window)?;
 
     // Save to state and disk
     *state.focused_window.lock().unwrap() = Some(window_info.clone());
@@ -520,10 +520,34 @@ async fn get_focused_window(state: tauri::State<'_, AppState>) -> Result<Option<
 }
 
 #[tauri::command]
-async fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
+async fn show_main_window(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
+        
+        // If there's a saved focused window, automatically arrange windows
+        #[cfg(target_os = "macos")]
+        {
+            let focused_window = state.focused_window.lock().unwrap().clone();
+            if let Some(window_info) = focused_window {
+                println!("[Lighthouse] Auto-arranging with saved window: {:?}", window_info);
+                // Try to arrange windows, but don't fail if it doesn't work
+                // (e.g., if the window no longer exists)
+                if let Err(e) = window_management::arrange_windows(&window_info, &window) {
+                    println!("[Lighthouse] Failed to auto-arrange: {}", e);
+                    // Clear the saved state since the window probably doesn't exist anymore
+                    *state.focused_window.lock().unwrap() = None;
+                    // Optionally delete from disk
+                    let _ = std::fs::remove_file(
+                        app.path().app_data_dir()
+                            .ok()
+                            .map(|d| d.join("focus_state.json"))
+                            .unwrap_or_default()
+                    );
+                }
+            }
+        }
+        
         Ok(())
     } else {
         Err("Main window not found".to_string())
@@ -607,9 +631,11 @@ pub fn run() {
               button_state: MouseButtonState::Up,
               ..
             } = event {
-              let app = tray.app_handle().clone();
+              let app_handle = tray.app_handle().clone();
               tauri::async_runtime::spawn(async move {
-                let _ = show_main_window(app).await;
+                let state = app_handle.state::<AppState>();
+                let app_clone = app_handle.clone();
+                let _ = show_main_window(app_clone, state).await;
               });
             }
           })

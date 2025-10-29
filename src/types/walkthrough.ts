@@ -79,12 +79,14 @@ export interface PrebuiltGuide {
   steps: PrebuiltStep[]
   isRecent?: boolean
   isCompleted?: boolean
+  inProgress?: boolean
 }
 
 export interface PrebuiltGuideSession {
   guide: PrebuiltGuide
   currentStepIndex: number
   completedSteps: Set<number>
+  skippedSteps: Set<number>
   isComplete: boolean
   showHint: boolean
 }

@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { Send, Play, Check, ArrowLeft } from 'lucide-react'
+import { RadialProgress } from '@/components/ui/radial-progress'
+import { Send, Play, Check, ArrowLeft, Plus, Camera, Mic, ArrowUp } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { geminiService } from '@/services/gemini'
@@ -11,7 +12,7 @@ import type { Point, BoundingBox, Message, WalkthroughStep, WalkthroughSession, 
 const PREBUILT_GUIDES: PrebuiltGuide[] = [
     {
         id: 'review-pr',
-        title: 'How to review your teammate\'s pull request',
+        title: 'Review a pull request',
         topic: 'Git Basics',
         description: 'Learn how to review code changes in a pull request on GitHub',
         isRecent: true,
@@ -164,7 +165,7 @@ const TOPICS = [
         id: 'git-basics',
         name: 'Git Basics',
         description: 'Learn the basics of using GitHub to collaborate on code repositories.',
-        icon: '○'
+        icon: '▷'
     },
     {
         id: 'conflict-resolution',
@@ -194,6 +195,9 @@ export function Helper() {
     const [currentView, setCurrentView] = useState<ViewType>('landing')
     const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
     const [prebuiltGuideSession, setPrebuiltGuideSession] = useState<PrebuiltGuideSession | null>(null)
+
+    // Track guide progress (session-based, not persisted)
+    const [guideProgress, setGuideProgress] = useState<Map<string, { currentStep: number, totalSteps: number, hasSkipped: boolean, isComplete: boolean }>>(new Map())
 
     // Existing AI walkthrough states
     const [messages, setMessages] = useState<Message[]>([])
@@ -293,12 +297,21 @@ export function Helper() {
             guide,
             currentStepIndex: 0,
             completedSteps: new Set(),
+            skippedSteps: new Set(),
             isComplete: false,
             showHint: false
         }
 
         setPrebuiltGuideSession(session)
         setCurrentView('activeGuide')
+
+        // Update guide progress
+        setGuideProgress(prev => new Map(prev).set(guideId, {
+            currentStep: 1,
+            totalSteps: guide.steps.length,
+            hasSkipped: false,
+            isComplete: false
+        }))
 
         // Show overlay for first step
         const firstStep = guide.steps[0]
@@ -317,7 +330,7 @@ export function Helper() {
     const proceedPrebuiltGuide = async () => {
         if (!prebuiltGuideSession || prebuiltGuideSession.isComplete) return
 
-        const { guide, currentStepIndex, completedSteps } = prebuiltGuideSession
+        const { guide, currentStepIndex, completedSteps, skippedSteps } = prebuiltGuideSession
 
         // Mark current step as completed
         const newCompletedSteps = new Set(completedSteps)
@@ -337,6 +350,14 @@ export function Helper() {
             }
 
             setPrebuiltGuideSession(updatedSession)
+
+            // Update guide progress
+            setGuideProgress(prev => new Map(prev).set(guide.id, {
+                currentStep: nextStepIndex + 1,
+                totalSteps: guide.steps.length,
+                hasSkipped: skippedSteps.size > 0,
+                isComplete: false
+            }))
 
             // Update overlay with next step
             if (overlayWindowExistsRef.current) {
@@ -360,6 +381,14 @@ export function Helper() {
 
             setPrebuiltGuideSession(updatedSession)
 
+            // Update guide progress
+            setGuideProgress(prev => new Map(prev).set(guide.id, {
+                currentStep: guide.steps.length,
+                totalSteps: guide.steps.length,
+                hasSkipped: skippedSteps.size > 0,
+                isComplete: true
+            }))
+
             // Update overlay to show completion
             if (overlayWindowExistsRef.current) {
                 await invoke('update_screen_overlay_data', {
@@ -378,7 +407,11 @@ export function Helper() {
     const skipPrebuiltStep = async () => {
         if (!prebuiltGuideSession || prebuiltGuideSession.isComplete) return
 
-        const { guide, currentStepIndex } = prebuiltGuideSession
+        const { guide, currentStepIndex, skippedSteps } = prebuiltGuideSession
+
+        // Mark current step as skipped
+        const newSkippedSteps = new Set(skippedSteps)
+        newSkippedSteps.add(currentStepIndex)
 
         // Skip without marking complete - just move to next step
         if (currentStepIndex + 1 < guide.steps.length) {
@@ -388,10 +421,19 @@ export function Helper() {
             const updatedSession: PrebuiltGuideSession = {
                 ...prebuiltGuideSession,
                 currentStepIndex: nextStepIndex,
+                skippedSteps: newSkippedSteps,
                 showHint: false
             }
 
             setPrebuiltGuideSession(updatedSession)
+
+            // Update guide progress - mark as skipped
+            setGuideProgress(prev => new Map(prev).set(guide.id, {
+                currentStep: nextStepIndex + 1,
+                totalSteps: guide.steps.length,
+                hasSkipped: true,
+                isComplete: false
+            }))
 
             // Update overlay
             if (overlayWindowExistsRef.current) {
@@ -723,21 +765,33 @@ export function Helper() {
                     {/* Recent Guides */}
                     <div>
                         <h2 className="text-sm font-semibold text-zinc-300 mb-3">Recent Guides</h2>
-                        <div className="space-y-2">
-                            {PREBUILT_GUIDES.filter(g => g.isRecent).map(guide => (
-                                <button
-                                    key={guide.id}
-                                    onClick={() => startPrebuiltGuide(guide.id)}
-                                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 transition-all text-left"
-                                >
-                                    {guide.isCompleted ? (
-                                        <Check className="h-5 w-5 text-green-400 flex-shrink-0" />
-                                    ) : (
-                                        <Play className="h-5 w-5 text-blue-400 flex-shrink-0" />
-                                    )}
-                                    <span className="text-sm text-zinc-200">{guide.title}</span>
-                                </button>
-                            ))}
+                        <div className="grid grid-cols-2 gap-2">
+                            {PREBUILT_GUIDES.filter(g => g.isRecent).map(guide => {
+                                const progress = guideProgress.get(guide.id)
+                                const isInProgress = progress && !progress.isComplete
+                                const isCompleted = progress?.isComplete || guide.isCompleted
+
+                                return (
+                                    <button
+                                        key={guide.id}
+                                        onClick={() => startPrebuiltGuide(guide.id)}
+                                        className="flex items-center gap-2 p-2 rounded-full bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 transition-all text-left"
+                                    >
+                                        {isCompleted ? (
+                                            <Check className="h-4 w-4 text-green-400 flex-shrink-0" />
+                                        ) : isInProgress ? (
+                                            <RadialProgress
+                                                progress={progress.currentStep / progress.totalSteps}
+                                                hasSkipped={progress.hasSkipped}
+                                                size={16}
+                                            />
+                                        ) : (
+                                            <div className="h-4 w-4 rounded-full border-2 border-zinc-600 flex-shrink-0" />
+                                        )}
+                                        <span className="text-xs text-zinc-200">{guide.title}</span>
+                                    </button>
+                                )
+                            })}
                         </div>
                     </div>
 
@@ -752,14 +806,14 @@ export function Helper() {
                                         setSelectedTopic(topic.id)
                                         setCurrentView('topic')
                                     }}
-                                    className="flex items-center gap-2 p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 transition-all text-left"
+                                    className="flex items-center gap-2 p-2 rounded-full bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 transition-all text-left"
                                 >
                                     <span className="text-zinc-400">{topic.icon}</span>
-                                    <span className="text-sm text-zinc-200">{topic.name}</span>
+                                    <span className="text-xs text-zinc-200">{topic.name}</span>
                                 </button>
                             ))}
                         </div>
-                        <button className="w-full mt-3 p-3 rounded-xl border border-zinc-700/50 text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all">
+                        <button className="w-full mt-3 p-2 rounded-full border border-zinc-700/50 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all">
                             Browse All Topics
                         </button>
                     </div>
@@ -824,24 +878,57 @@ export function Helper() {
             <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Header with title and progress */}
                 <div className="p-6 space-y-4">
+                    <button
+                        onClick={async () => {
+                            setPrebuiltGuideSession(null)
+                            setCurrentView('landing')
+                            if (overlayWindowExistsRef.current) {
+                                await invoke('close_screen_overlay')
+                                overlayWindowExistsRef.current = false
+                            }
+                        }}
+                        className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 transition-colors mb-2"
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                        <span className="text-sm">Back</span>
+                    </button>
                     <div className="flex items-center gap-3">
-                        <Play className="h-6 w-6 text-green-400" />
+                        {isComplete ? (
+                            <Check className="h-6 w-6 text-green-400" />
+                        ) : (
+                            <RadialProgress
+                                progress={(currentStepIndex + 1) / guide.steps.length}
+                                hasSkipped={prebuiltGuideSession.skippedSteps.size > 0}
+                                size={24}
+                            />
+                        )}
                         <h1 className="text-2xl font-bold text-white">{guide.title}</h1>
                     </div>
 
                     {/* Progress dots */}
-                    <div className="flex items-center justify-center gap-2">
+                    <div className="flex items-center justify-center">
                         {guide.steps.map((_, index) => (
-                            <div
-                                key={index}
-                                className={`h-2 w-2 rounded-full transition-all ${
-                                    index === currentStepIndex
-                                        ? 'bg-green-400 scale-125'
-                                        : index < currentStepIndex
-                                        ? 'bg-zinc-500'
-                                        : 'bg-zinc-700'
-                                }`}
-                            />
+                            <div key={index} className="flex items-center">
+                                <div
+                                    className={`h-2.5 w-2.5 rounded-full transition-all ${
+                                        index <= currentStepIndex
+                                            ? 'bg-green-400'
+                                            : 'bg-zinc-700'
+                                    } ${
+                                        index === currentStepIndex ? 'scale-125' : ''
+                                    }`}
+                                />
+                                {/* Line connecting to next dot */}
+                                {index < guide.steps.length - 1 && (
+                                    <div
+                                        className={`h-0.5 w-4 transition-all ${
+                                            index < currentStepIndex
+                                                ? 'bg-green-400'
+                                                : 'bg-zinc-700'
+                                        }`}
+                                    />
+                                )}
+                            </div>
                         ))}
                     </div>
                 </div>
@@ -937,7 +1024,7 @@ export function Helper() {
                     className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 transition-colors mb-2"
                 >
                     <ArrowLeft className="h-4 w-4" />
-                    <span className="text-sm">Back to guides</span>
+                    <span className="text-sm">Back</span>
                 </button>
                 <div className="text-center space-y-1">
                     <p className="text-sm text-zinc-400">AI-powered walkthrough</p>
@@ -983,13 +1070,13 @@ export function Helper() {
                 </ScrollArea>
             </div>
 
-            <div className="p-4 border-t border-zinc-800/50 bg-zinc-900/50 backdrop-blur space-y-3">
+            <div className="px-6 py-4 bg-zinc-900/50 backdrop-blur">
                 {statusMessage && (
-                    <div className="text-xs text-blue-400">
+                    <div className="text-xs text-blue-400 mb-3">
                         {statusMessage}
                     </div>
                 )}
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2 bg-zinc-800/90 rounded-full px-4 py-2.5 border border-zinc-700/50 max-w-full">
                     <input
                         ref={inputRef}
                         type="text"
@@ -1039,20 +1126,41 @@ export function Helper() {
                                 }
                             }
                         }}
-                        placeholder="Ask for help"
-                        className="flex-1 bg-zinc-800/80 text-white placeholder:text-zinc-500 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                        placeholder="Ask a question"
+                        className="flex-1 bg-transparent text-white placeholder:text-zinc-500 border-none focus:outline-none text-sm min-w-0"
                     />
-                    <Button
-                        onClick={handleSend}
-                        disabled={!input.trim() || isProcessing}
-                        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20 rounded-xl px-4 transition-all"
-                    >
-                        {isProcessing ? (
-                            <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                            <Send className="h-4 w-4" />
-                        )}
-                    </Button>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                            className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+                            aria-label="Add attachment"
+                        >
+                            <Plus className="h-4 w-4" />
+                        </button>
+                        <button
+                            className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+                            aria-label="Add image"
+                        >
+                            <Camera className="h-4 w-4" />
+                        </button>
+                        <button
+                            className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+                            aria-label="Voice input"
+                        >
+                            <Mic className="h-4 w-4" />
+                        </button>
+                        <button
+                            onClick={handleSend}
+                            disabled={!input.trim() || isProcessing}
+                            className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            aria-label="Send message"
+                        >
+                            {isProcessing ? (
+                                <div className="h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <ArrowUp className="h-4 w-4" />
+                            )}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1068,8 +1176,8 @@ export function Helper() {
 
             {/* Input box shown on landing view */}
             {currentView === 'landing' && (
-                <div className="p-4 border-t border-zinc-800/50 bg-zinc-900/50 backdrop-blur space-y-3">
-                    <div className="flex gap-2">
+                <div className="px-6 py-4 bg-zinc-900/50 backdrop-blur">
+                    <div className="flex items-center gap-2 bg-zinc-800/90 rounded-full px-4 py-2.5 border border-zinc-700/50 max-w-full">
                         <input
                             ref={inputRef}
                             type="text"
@@ -1081,21 +1189,42 @@ export function Helper() {
                                     handleSend()
                                 }
                             }}
-                            placeholder="Type a question..."
-                            className="flex-1 bg-zinc-800/80 text-white placeholder:text-zinc-500 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                            placeholder="Ask a question"
+                            className="flex-1 bg-transparent text-white placeholder:text-zinc-500 border-none focus:outline-none text-sm min-w-0"
                         />
-                        <Button
-                            onClick={() => {
-                                if (input.trim()) {
-                                    setCurrentView('aiChat')
-                                    handleSend()
-                                }
-                            }}
-                            disabled={!input.trim()}
-                            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20 rounded-xl px-4 transition-all"
-                        >
-                            <Send className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                                className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+                                aria-label="Add attachment"
+                            >
+                                <Plus className="h-4 w-4" />
+                            </button>
+                            <button
+                                className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+                                aria-label="Add image"
+                            >
+                                <Camera className="h-4 w-4" />
+                            </button>
+                            <button
+                                className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+                                aria-label="Voice input"
+                            >
+                                <Mic className="h-4 w-4" />
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (input.trim()) {
+                                        setCurrentView('aiChat')
+                                        handleSend()
+                                    }
+                                }}
+                                disabled={!input.trim()}
+                                className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                aria-label="Send message"
+                            >
+                                <ArrowUp className="h-4 w-4" />
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
