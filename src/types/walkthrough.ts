@@ -59,6 +59,7 @@ export interface Message {
   points?: Point[]
   boxes?: BoundingBox[]
   caption?: string
+  observation?: string
 }
 
 export type IntentType = 'query' | 'point' | 'detect' | 'walkthrough' | 'text-only'
@@ -67,6 +68,8 @@ export type IntentType = 'query' | 'point' | 'detect' | 'walkthrough' | 'text-on
 export interface PrebuiltStep {
   instruction: string
   hint?: string
+  caption?: string
+  observation?: string
   points?: Point[]
   boxes?: BoundingBox[]
 }

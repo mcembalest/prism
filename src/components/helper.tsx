@@ -18,39 +18,41 @@ const PREBUILT_GUIDES: PrebuiltGuide[] = [
         isRecent: true,
         steps: [
             {
-                instruction: 'Navigate to the Pull Requests tab',
-                hint: 'Look for the "Pull requests" link in the repository navigation menu near the top of the page',
-                points: [{ x: 0.15, y: 0.08 }]
+                caption: 'Open PR tab',
+                instruction: 'Navigate to the Pull Requests (PR) tab',
+                points: [{ x: 0.20, y: 0.20 }]
             },
             {
-                instruction: 'Click on the PR you want to review',
-                hint: 'Select the pull request from the list. You can filter by open, closed, or your review status',
-                points: [{ x: 0.5, y: 0.3 }]
+                caption: 'Pick a PR',
+                instruction: 'Click on the PR you want to review.',
+                observation: 'Looks like you have two open PRs here.',
+                points: [{ x: 0.25, y: 0.5 }]
             },
             {
+                caption: 'Open Files tab',
                 instruction: 'Click the Files changed tab',
-                hint: 'This tab shows all the code changes in a diff view. You\'ll find it next to "Conversation" and "Commits"',
-                points: [{ x: 0.25, y: 0.15 }]
+                points: [{ x: 0.45, y: 0.37 }]
             },
             {
-                instruction: 'Review the code changes',
-                hint: 'Read through the changes. Click the + icon next to any line to leave a comment. You can suggest specific code changes',
-                boxes: [{ xMin: 0.2, yMin: 0.25, xMax: 0.8, yMax: 0.7 }]
+                caption: 'Read code',
+                instruction: 'At this point in a PR review, you read the code diffs (changes in the code).',
+                observation: 'Looks like this is a simple change to the README file.',
+                points: [{ x: 0.35, y: 0.6 }]
             },
             {
+                caption: 'Review changes',
                 instruction: 'Click the Review changes button',
-                hint: 'Find the green "Review changes" button in the top right of the Files changed view',
-                points: [{ x: 0.85, y: 0.12 }]
+                points: [{ x: 0.88, y: 0.39 }]
             },
             {
+                caption: 'Add comment',
                 instruction: 'Add your review comment and choose review type',
-                hint: 'Write a summary comment, then select Comment, Approve, or Request changes',
-                boxes: [{ xMin: 0.6, yMin: 0.2, xMax: 0.95, yMax: 0.5 }]
+                points: [{ x: 0.88, y: 0.55 }]
             },
             {
+                caption: 'Submit',
                 instruction: 'Click Submit review',
-                hint: 'Your review will be posted and the PR author will be notified',
-                points: [{ x: 0.85, y: 0.52 }]
+                points: [{ x: 0.9, y: 0.85 }]
             }
         ]
     },
@@ -205,11 +207,20 @@ export function Helper() {
     const [isProcessing, setIsProcessing] = useState(false)
     const [statusMessage, setStatusMessage] = useState<string>('')
     const [walkthroughSession, setWalkthroughSession] = useState<WalkthroughSession | null>(null)
+
+    // Streaming observation states
+    const [streamingObservation, setStreamingObservation] = useState<string>('')
+    const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
+
+    // Keyboard shortcut flash notification
+    const [showShortcutFlash, setShowShortcutFlash] = useState(false)
+
     const overlayWindowExistsRef = useRef<boolean>(false)
     const scrollRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
     const proceedHandlerRef = useRef<(() => Promise<void>) | null>(null)
     const isExecutingShortcut = useRef<boolean>(false)
+    const streamingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -230,6 +241,10 @@ export function Helper() {
                     console.log('[Global Shortcut] Already executing, ignoring duplicate trigger')
                     return
                 }
+
+                // Show flash notification
+                setShowShortcutFlash(true)
+                setTimeout(() => setShowShortcutFlash(false), 800)
 
                 console.log('[Global Shortcut] Current state:', {
                     hasSession: !!walkthroughSession,
@@ -264,9 +279,19 @@ export function Helper() {
         }
     }, [])
 
+    // Cleanup streaming interval on unmount or view change
+    useEffect(() => {
+        return () => {
+            if (streamingIntervalRef.current) {
+                clearInterval(streamingIntervalRef.current)
+                streamingIntervalRef.current = null
+            }
+        }
+    }, [])
+
     const openScreenOverlay = async (
         points: Point[] = [],
-        boxes: BoundingBox[] = [],
+        boxes: BoundingBox[] = [], // Kept for backward compatibility but always ignored
         walkthroughSteps?: number,
         currentStep?: number,
         instruction?: string,
@@ -276,7 +301,7 @@ export function Helper() {
         try {
             await invoke('open_screen_overlay', {
                 points,
-                boxes,
+                boxes: [], // Always pass empty array - bounding boxes are disabled
                 walkthrough_steps: walkthroughSteps,
                 current_step: currentStep,
                 instruction,
@@ -313,15 +338,24 @@ export function Helper() {
             isComplete: false
         }))
 
-        // Show overlay for first step
+        // Add first step as an assistant message
         const firstStep = guide.steps[0]
+        const stepMessage = createAssistantMessage(firstStep.instruction)
+        setMessages([stepMessage])
+
+        // Trigger observation streaming if this step has one
+        if (firstStep.observation) {
+            streamObservation(firstStep.observation)
+        }
+
+        // Show overlay for first step
         await openScreenOverlay(
             firstStep.points || [],
             firstStep.boxes || [],
             guide.steps.length,
             1,
             firstStep.instruction,
-            guide.title,
+            firstStep.caption || guide.title,
             false
         )
         overlayWindowExistsRef.current = true
@@ -359,15 +393,24 @@ export function Helper() {
                 isComplete: false
             }))
 
+            // Add next step as an assistant message
+            const stepMessage = createAssistantMessage(nextStep.instruction)
+            setMessages(prev => [...prev, stepMessage])
+
+            // Trigger observation streaming if this step has one
+            if (nextStep.observation) {
+                streamObservation(nextStep.observation)
+            }
+
             // Update overlay with next step
             if (overlayWindowExistsRef.current) {
                 await invoke('update_screen_overlay_data', {
                     points: nextStep.points || [],
-                    boxes: nextStep.boxes || [],
+                    boxes: [], // Bounding boxes disabled - only show points
                     walkthrough_steps: guide.steps.length,
                     current_step: nextStepIndex + 1,
                     instruction: nextStep.instruction,
-                    caption: guide.title,
+                    caption: nextStep.caption || guide.title,
                     is_complete: false
                 })
             }
@@ -391,13 +434,14 @@ export function Helper() {
 
             // Update overlay to show completion
             if (overlayWindowExistsRef.current) {
+                const lastStep = guide.steps[guide.steps.length - 1]
                 await invoke('update_screen_overlay_data', {
                     points: [],
-                    boxes: [],
+                    boxes: [], // Bounding boxes disabled
                     walkthrough_steps: guide.steps.length,
                     current_step: guide.steps.length,
                     instruction: 'Guide complete!',
-                    caption: guide.title,
+                    caption: lastStep.caption || guide.title,
                     is_complete: true
                 })
             }
@@ -435,27 +479,28 @@ export function Helper() {
                 isComplete: false
             }))
 
+            // Add next step as an assistant message
+            const stepMessage = createAssistantMessage(nextStep.instruction)
+            setMessages(prev => [...prev, stepMessage])
+
+            // Trigger observation streaming if this step has one
+            if (nextStep.observation) {
+                streamObservation(nextStep.observation)
+            }
+
             // Update overlay
             if (overlayWindowExistsRef.current) {
                 await invoke('update_screen_overlay_data', {
                     points: nextStep.points || [],
-                    boxes: nextStep.boxes || [],
+                    boxes: [], // Bounding boxes disabled - only show points
                     walkthrough_steps: guide.steps.length,
                     current_step: nextStepIndex + 1,
                     instruction: nextStep.instruction,
-                    caption: guide.title,
+                    caption: nextStep.caption || guide.title,
                     is_complete: false
                 })
             }
         }
-    }
-
-    const toggleHint = () => {
-        if (!prebuiltGuideSession) return
-        setPrebuiltGuideSession({
-            ...prebuiltGuideSession,
-            showHint: !prebuiltGuideSession.showHint
-        })
     }
 
     const handleProceedToNextStep = async () => {
@@ -509,7 +554,7 @@ export function Helper() {
                 caption: stepResult.caption,
                 instruction: stepResult.instruction,
                 points: stepResult.points,
-                boxes: stepResult.boxes
+                boxes: [] // Bounding boxes disabled - only use cursor points
             }
 
             const updatedSession: WalkthroughSession = {
@@ -569,7 +614,7 @@ export function Helper() {
                 // Update existing overlay window
                 await invoke('update_screen_overlay_data', {
                     points: currentStep.points,
-                    boxes: currentStep.boxes,
+                    boxes: [], // Bounding boxes disabled - only show points
                     walkthrough_steps: session.steps.length,
                     current_step: session.currentStepIndex + 1,
                     instruction: currentStep.instruction,
@@ -601,7 +646,8 @@ export function Helper() {
         image?: string,
         points?: Point[],
         boxes?: BoundingBox[],
-        caption?: string
+        caption?: string,
+        observation?: string
     ): Message => ({
         id: Date.now().toString(),
         role: 'assistant',
@@ -609,13 +655,50 @@ export function Helper() {
         image,
         points,
         boxes,
-        caption
+        caption,
+        observation
     })
 
     // Helper to take screenshot with fade animation
     const takeScreenshot = async (): Promise<string> => {
         setStatusMessage('Analyzing...')
         return await invoke<string>('take_screenshot')
+    }
+
+    // Helper to add observation as separate message with streaming effect
+    const streamObservation = (observation: string) => {
+        // Clear any existing streaming interval
+        if (streamingIntervalRef.current) {
+            clearInterval(streamingIntervalRef.current)
+            streamingIntervalRef.current = null
+        }
+
+        // Wait 2.5 seconds before showing observation (longer, more natural delay)
+        setTimeout(() => {
+            // Create and add observation message
+            const observationMessage = createAssistantMessage(observation)
+            setMessages(prev => [...prev, observationMessage])
+
+            // Reset streaming state and start streaming this message
+            setStreamingObservation('')
+            setStreamingMessageId(observationMessage.id)
+
+            // Stream the content character by character
+            let charIndex = 0
+            const streamInterval = setInterval(() => {
+                if (charIndex < observation.length) {
+                    setStreamingObservation(observation.slice(0, charIndex + 1))
+                    charIndex++
+                } else {
+                    // Streaming complete
+                    clearInterval(streamInterval)
+                    streamingIntervalRef.current = null
+                    setStreamingMessageId(null)
+                }
+            }, 15) // 35ms per character (~1.2 seconds for a 35-char observation)
+
+            streamingIntervalRef.current = streamInterval
+        }, 2500) // 2.5 second delay before observation appears
     }
 
     // Intent Handlers
@@ -639,20 +722,21 @@ export function Helper() {
         await openScreenOverlay(result.points, [], result.points.length, result.points.length)
     }
 
-    const handleDetectIntent = async (query: string) => {
-        const screenshot = await takeScreenshot()
-        setStatusMessage(`Detecting "${query}"...`)
-        const result = await geminiService.detect(screenshot, query)
+    // Detect intent has been disabled - only cursor points are supported
+    // const handleDetectIntent = async (query: string) => {
+    //     const screenshot = await takeScreenshot()
+    //     setStatusMessage(`Detecting "${query}"...`)
+    //     const result = await geminiService.detect(screenshot, query)
 
-        setMessages(prev => [...prev, createAssistantMessage(
-            `Detected ${result.objects.length} object(s) matching "${query}"`,
-            screenshot,
-            undefined,
-            result.objects
-        )])
+    //     setMessages(prev => [...prev, createAssistantMessage(
+    //         `Detected ${result.objects.length} object(s) matching "${query}"`,
+    //         screenshot,
+    //         undefined,
+    //         result.objects
+    //     )])
 
-        await openScreenOverlay([], result.objects, result.objects.length, result.objects.length)
-    }
+    //     await openScreenOverlay([], result.objects, result.objects.length, result.objects.length)
+    // }
 
     const handleQueryIntent = async (query: string) => {
         const screenshot = await takeScreenshot()
@@ -674,7 +758,7 @@ export function Helper() {
             caption: stepResult.caption,
             instruction: stepResult.instruction,
             points: stepResult.points,
-            boxes: stepResult.boxes
+            boxes: [] // Bounding boxes disabled - only use cursor points
         }
 
         const newSession: WalkthroughSession = {
@@ -709,15 +793,43 @@ export function Helper() {
     const handleSend = async () => {
         if (!input.trim() || isProcessing) return
 
-        setMessages([]) // Clear previous conversation - helper is stateless
-        setIsProcessing(true)
-
         const userMessage = createAssistantMessage(input)
         userMessage.role = 'user'
-        setMessages(prev => [...prev, userMessage])
 
         const query = input
         setInput('')
+
+        // Mocked responses for landing and guide views
+        if (currentView === 'landing' || currentView === 'activeGuide') {
+            setMessages(prev => [...prev, userMessage])
+            setIsProcessing(true)
+
+            // Simulate thinking delay
+            await new Promise(resolve => setTimeout(resolve, 800))
+
+            let mockResponse = ''
+            if (currentView === 'landing') {
+                mockResponse = "I can help you get started! Try selecting one of the guides above, or ask me a specific question about GitHub workflows."
+            } else if (currentView === 'activeGuide') {
+                const guideName = prebuiltGuideSession?.guide.title || 'this guide'
+                const currentStep = prebuiltGuideSession ? prebuiltGuideSession.currentStepIndex + 1 : 1
+                mockResponse = `You're on step ${currentStep} of "${guideName}". ${query.toLowerCase().includes('help') || query.toLowerCase().includes('stuck')
+                    ? 'Try following the instruction above, or use the Hint button if you need more guidance. You can also skip this step if needed.'
+                    : 'What specific part would you like help with?'}`
+            }
+
+            setMessages(prev => [...prev, createAssistantMessage(mockResponse)])
+            setIsProcessing(false)
+            return
+        }
+
+        // Full AI logic for aiChat view
+        // Only clear messages if there's no active walkthrough session
+        if (!walkthroughSession || !walkthroughSession.isActive) {
+            setMessages([]) // Clear previous conversation - helper is stateless
+        }
+        setIsProcessing(true)
+        setMessages(prev => [...prev, userMessage])
 
         try {
             setStatusMessage('Analyzing request...')
@@ -732,7 +844,10 @@ export function Helper() {
                     await handlePointIntent(query)
                     break
                 case 'detect':
-                    await handleDetectIntent(query)
+                    // Detect intent has been disabled - only cursor points are supported
+                    setMessages(prev => [...prev, createAssistantMessage(
+                        'Detection functionality is currently disabled. Please use cursor pointing instead.'
+                    )])
                     break
                 case 'walkthrough':
                     await handleWalkthroughIntent(query)
@@ -760,8 +875,30 @@ export function Helper() {
                 <p className="text-sm text-zinc-400 text-center">Type a question or choose from existing guides</p>
             </div>
 
-            <ScrollArea className="flex-1">
-                <div className="p-6 space-y-6">
+            <ScrollArea className="flex-1 h-0">
+                <div ref={scrollRef} className="p-6 space-y-6">
+                    {/* Chat messages */}
+                    {messages.length > 0 && (
+                        <div className="space-y-3 mb-6">
+                            {messages.map((message, index) => (
+                                <div
+                                    key={message.id}
+                                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                >
+                                    <div
+                                        className={`max-w-[85%] rounded-2xl p-3.5 shadow-lg ${
+                                            message.role === 'user'
+                                                ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white'
+                                                : 'bg-zinc-800/80 text-gray-100 border border-zinc-700/50'
+                                        }`}
+                                    >
+                                        <p className="text-sm leading-relaxed">{message.content}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {/* Recent Guides */}
                     <div>
                         <h2 className="text-sm font-semibold text-zinc-300 mb-3">Recent Guides</h2>
@@ -819,6 +956,101 @@ export function Helper() {
                     </div>
                 </div>
             </ScrollArea>
+
+            {/* Chat input at bottom - identical to guide view */}
+            <div className="px-6 py-4 bg-zinc-900/50 backdrop-blur">
+                {statusMessage && (
+                    <div className="text-xs text-blue-400 mb-3">
+                        {statusMessage}
+                    </div>
+                )}
+                <div className="flex items-center gap-2 bg-zinc-800/90 rounded-full px-4 py-2.5 border border-zinc-700/50 max-w-full">
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onPaste={(e) => {
+                            const t = e.clipboardData?.getData('text')
+                            if (typeof t === 'string' && t.length > 0) {
+                                e.preventDefault()
+                                const el = inputRef.current
+                                const start = el?.selectionStart ?? input.length
+                                const end = el?.selectionEnd ?? input.length
+                                const newValue = input.slice(0, start) + t + input.slice(end)
+                                setInput(newValue)
+                                requestAnimationFrame(() => {
+                                    if (el) {
+                                        const pos = start + t.length
+                                        el.setSelectionRange(pos, pos)
+                                    }
+                                })
+                            }
+                        }}
+                        onKeyDown={async (e) => {
+                            if (e.key === 'Enter') {
+                                handleSend()
+                                return
+                            }
+                            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') {
+                                try {
+                                    const clip = await navigator.clipboard?.readText?.()
+                                    if (clip) {
+                                        e.preventDefault()
+                                        const el = inputRef.current
+                                        const start = el?.selectionStart ?? input.length
+                                        const end = el?.selectionEnd ?? input.length
+                                        const newValue = input.slice(0, start) + clip + input.slice(end)
+                                        setInput(newValue)
+                                        requestAnimationFrame(() => {
+                                            if (el) {
+                                                const pos = start + clip.length
+                                                el.setSelectionRange(pos, pos)
+                                            }
+                                        })
+                                    }
+                                } catch {
+                                    // ignore
+                                }
+                            }
+                        }}
+                        placeholder="Ask a question"
+                        className="flex-1 bg-transparent text-white placeholder:text-zinc-500 border-none focus:outline-none text-sm min-w-0"
+                    />
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                            className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+                            aria-label="Add attachment"
+                        >
+                            <Plus className="h-4 w-4" />
+                        </button>
+                        <button
+                            className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+                            aria-label="Add image"
+                        >
+                            <Camera className="h-4 w-4" />
+                        </button>
+                        <button
+                            className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+                            aria-label="Voice input"
+                        >
+                            <Mic className="h-4 w-4" />
+                        </button>
+                        <button
+                            onClick={handleSend}
+                            disabled={!input.trim() || isProcessing}
+                            className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            aria-label="Send message"
+                        >
+                            {isProcessing ? (
+                                <div className="h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <ArrowUp className="h-4 w-4" />
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     )
 
@@ -830,7 +1062,10 @@ export function Helper() {
             <div className="flex-1 flex flex-col overflow-hidden">
                 <div className="p-6 border-b border-zinc-800/50">
                     <button
-                        onClick={() => setCurrentView('landing')}
+                        onClick={() => {
+                            setMessages([])
+                            setCurrentView('landing')
+                        }}
                         className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 transition-colors mb-4"
                     >
                         <ArrowLeft className="h-4 w-4" />
@@ -845,7 +1080,7 @@ export function Helper() {
                     )}
                 </div>
 
-                <ScrollArea className="flex-1">
+                <ScrollArea className="flex-1 h-0">
                     <div className="p-6">
                         <h2 className="text-sm font-semibold text-zinc-300 mb-3">Guides</h2>
                         <div className="space-y-2">
@@ -869,10 +1104,7 @@ export function Helper() {
     const renderActiveGuideView = () => {
         if (!prebuiltGuideSession) return null
 
-        const { guide, currentStepIndex, completedSteps, isComplete, showHint } = prebuiltGuideSession
-        const currentStep = guide.steps[currentStepIndex]
-        const nextStep = currentStepIndex + 1 < guide.steps.length ? guide.steps[currentStepIndex + 1] : null
-        const isCurrentStepComplete = completedSteps.has(currentStepIndex)
+        const { guide, currentStepIndex, isComplete } = prebuiltGuideSession
 
         return (
             <div className="flex-1 flex flex-col overflow-hidden">
@@ -880,6 +1112,7 @@ export function Helper() {
                 <div className="p-6 space-y-4">
                     <button
                         onClick={async () => {
+                            setMessages([])
                             setPrebuiltGuideSession(null)
                             setCurrentView('landing')
                             if (overlayWindowExistsRef.current) {
@@ -933,85 +1166,181 @@ export function Helper() {
                     </div>
                 </div>
 
-                <ScrollArea className="flex-1">
-                    <div className="p-6 space-y-4">
-                        {/* Current Step */}
-                        <div className={`p-5 rounded-2xl border ${
-                            isCurrentStepComplete
-                                ? 'bg-green-900/20 border-green-700/50'
-                                : 'bg-zinc-800/80 border-zinc-700/50'
-                        }`}>
-                            <div className="flex items-start justify-between gap-3">
-                                <p className="text-sm text-zinc-100 leading-relaxed flex-1">
-                                    {currentStep.instruction}
-                                </p>
-                                {isCurrentStepComplete && (
-                                    <Check className="h-5 w-5 text-green-400 flex-shrink-0" />
-                                )}
-                            </div>
+                <ScrollArea className="flex-1 h-0">
+                    <div ref={scrollRef} className="p-6 space-y-4">
+                        {/* Chat messages */}
+                        {messages.length > 0 && (
+                            <div className="space-y-3 mb-6">
+                                {messages.map((message, index) => {
+                                    const isLastMessage = index === messages.length - 1
+                                    return (
+                                        <div key={message.id}>
+                                            <div
+                                                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                            >
+                                                <div
+                                                    className={`max-w-[85%] rounded-2xl p-3.5 shadow-lg ${
+                                                        message.role === 'user'
+                                                            ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white'
+                                                            : 'bg-zinc-800/80 text-gray-100 border border-zinc-700/50'
+                                                    }`}
+                                                >
+                                                    {/* Show streaming text if this message is currently streaming */}
+                                                    <p className="text-sm leading-relaxed">
+                                                        {streamingMessageId === message.id
+                                                            ? streamingObservation
+                                                            : message.content}
+                                                        {streamingMessageId === message.id && (
+                                                            <span className="animate-pulse ml-0.5">▊</span>
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            </div>
 
-                            {/* Hint section */}
-                            {currentStep.hint && showHint && (
-                                <div className="mt-3 pt-3 border-t border-zinc-700/50">
-                                    <p className="text-xs text-zinc-400">{currentStep.hint}</p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Next Step Preview */}
-                        {nextStep && !isComplete && (
-                            <div className="p-5 rounded-2xl bg-zinc-900/50 border border-zinc-800/50">
-                                <p className="text-sm text-zinc-400 leading-relaxed">{nextStep.instruction}</p>
+                                            {/* Proceed and Skip buttons below last message */}
+                                            {isLastMessage && !isComplete && (
+                                                <div className="flex justify-start gap-2 mt-2 ml-1">
+                                                    <button
+                                                        onClick={proceedPrebuiltGuide}
+                                                        className={`text-xs text-purple-400 hover:text-purple-300 transition-all bg-purple-500/10 hover:bg-purple-500/20 px-2.5 py-1 rounded-md flex items-center gap-1.5 ${showShortcutFlash ? 'ring-2 ring-purple-400 scale-105' : ''}`}
+                                                    >
+                                                        Proceed
+                                                        <kbd className="px-1 py-0.5 text-[10px] font-mono bg-zinc-700/50 rounded border border-zinc-600/50">⌘↵</kbd>
+                                                    </button>
+                                                    <button
+                                                        onClick={skipPrebuiltStep}
+                                                        className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors bg-zinc-800/50 hover:bg-zinc-700/50 px-2.5 py-1 rounded-md"
+                                                    >
+                                                        Skip
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })}
                             </div>
                         )}
 
                         {/* Completion message */}
                         {isComplete && (
-                            <div className="p-5 rounded-2xl bg-green-900/20 border border-green-700/50 text-center">
-                                <Check className="h-8 w-8 text-green-400 mx-auto mb-2" />
-                                <p className="text-sm text-green-300 font-semibold">Guide Complete!</p>
-                                <button
-                                    onClick={() => {
-                                        setPrebuiltGuideSession(null)
-                                        setCurrentView('landing')
-                                    }}
-                                    className="mt-3 text-xs text-zinc-400 hover:text-zinc-200"
-                                >
-                                    Return to guides
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Hint and Skip buttons */}
-                        {!isComplete && (
-                            <div className="flex gap-3">
-                                {currentStep.hint && (
-                                    <button
-                                        onClick={toggleHint}
-                                        className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all"
+                        <div className="flex justify-start">
+                        <div className="max-w-[85%] rounded-2xl p-3.5 shadow-lg bg-green-900/20 border border-green-700/50 text-center">
+                        <Check className="h-8 w-8 text-green-400 mx-auto mb-2" />
+                        <p className="text-sm text-green-300 font-semibold">Guide Complete!</p>
+                        <button
+                                onClick={async () => {
+                                        setMessages([])
+                                            setPrebuiltGuideSession(null)
+                                            setCurrentView('landing')
+                                            if (overlayWindowExistsRef.current) {
+                                                await invoke('close_screen_overlay')
+                                                overlayWindowExistsRef.current = false
+                                            }
+                                        }}
+                                        className="mt-3 text-xs text-zinc-400 hover:text-zinc-200"
                                     >
-                                        {showHint ? 'Hide Hint' : 'Hint'}
+                                        Return to guides
                                     </button>
-                                )}
-                                <button
-                                    onClick={skipPrebuiltStep}
-                                    className="px-4 py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all"
-                                >
-                                    Skip
-                                </button>
+                                </div>
                             </div>
                         )}
                     </div>
                 </ScrollArea>
 
-                {/* Proceed instruction */}
-                {!isComplete && (
-                    <div className="p-4 border-t border-zinc-800/50 bg-zinc-900/50">
-                        <p className="text-xs text-center text-zinc-500">
-                            Press <span className="text-zinc-400 font-mono">⌘+Enter</span> to proceed to next step
-                        </p>
+                {/* Chat input at bottom - identical to AI chat */}
+                <div className="px-6 py-4 bg-zinc-900/50 backdrop-blur">
+                    {statusMessage && (
+                        <div className="text-xs text-blue-400 mb-3">
+                            {statusMessage}
+                        </div>
+                    )}
+                    <div className="flex items-center gap-2 bg-zinc-800/90 rounded-full px-4 py-2.5 border border-zinc-700/50 max-w-full">
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onPaste={(e) => {
+                                const t = e.clipboardData?.getData('text')
+                                if (typeof t === 'string' && t.length > 0) {
+                                    e.preventDefault()
+                                    const el = inputRef.current
+                                    const start = el?.selectionStart ?? input.length
+                                    const end = el?.selectionEnd ?? input.length
+                                    const newValue = input.slice(0, start) + t + input.slice(end)
+                                    setInput(newValue)
+                                    requestAnimationFrame(() => {
+                                        if (el) {
+                                            const pos = start + t.length
+                                            el.setSelectionRange(pos, pos)
+                                        }
+                                    })
+                                }
+                            }}
+                            onKeyDown={async (e) => {
+                                if (e.key === 'Enter') {
+                                    handleSend()
+                                    return
+                                }
+                                if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') {
+                                    try {
+                                        const clip = await navigator.clipboard?.readText?.()
+                                        if (clip) {
+                                            e.preventDefault()
+                                            const el = inputRef.current
+                                            const start = el?.selectionStart ?? input.length
+                                            const end = el?.selectionEnd ?? input.length
+                                            const newValue = input.slice(0, start) + clip + input.slice(end)
+                                            setInput(newValue)
+                                            requestAnimationFrame(() => {
+                                                if (el) {
+                                                    const pos = start + clip.length
+                                                    el.setSelectionRange(pos, pos)
+                                                }
+                                            })
+                                        }
+                                    } catch {
+                                        // ignore
+                                    }
+                                }
+                            }}
+                            placeholder="Ask a question"
+                            className="flex-1 bg-transparent text-white placeholder:text-zinc-500 border-none focus:outline-none text-sm min-w-0"
+                        />
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                                className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+                                aria-label="Add attachment"
+                            >
+                                <Plus className="h-4 w-4" />
+                            </button>
+                            <button
+                                className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+                                aria-label="Add image"
+                            >
+                                <Camera className="h-4 w-4" />
+                            </button>
+                            <button
+                                className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+                                aria-label="Voice input"
+                            >
+                                <Mic className="h-4 w-4" />
+                            </button>
+                            <button
+                                onClick={handleSend}
+                                disabled={!input.trim() || isProcessing}
+                                className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                aria-label="Send message"
+                            >
+                                {isProcessing ? (
+                                    <div className="h-4 w-4 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <ArrowUp className="h-4 w-4" />
+                                )}
+                            </button>
+                        </div>
                     </div>
-                )}
+                </div>
             </div>
         )
     }
@@ -1020,7 +1349,11 @@ export function Helper() {
         <div className="flex-1 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-zinc-800/50">
                 <button
-                    onClick={() => setCurrentView('landing')}
+                    onClick={() => {
+                        setMessages([])
+                        setWalkthroughSession(null)
+                        setCurrentView('landing')
+                    }}
                     className="flex items-center gap-2 text-zinc-400 hover:text-zinc-200 transition-colors mb-2"
                 >
                     <ArrowLeft className="h-4 w-4" />
@@ -1173,57 +1506,17 @@ export function Helper() {
             {currentView === 'topic' && renderTopicView()}
             {currentView === 'activeGuide' && renderActiveGuideView()}
             {currentView === 'aiChat' && renderAIChatView()}
-
-            {/* Input box shown on landing view */}
-            {currentView === 'landing' && (
-                <div className="px-6 py-4 bg-zinc-900/50 backdrop-blur">
-                    <div className="flex items-center gap-2 bg-zinc-800/90 rounded-full px-4 py-2.5 border border-zinc-700/50 max-w-full">
-                        <input
-                            ref={inputRef}
-                            type="text"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && input.trim()) {
-                                    setCurrentView('aiChat')
-                                    handleSend()
-                                }
-                            }}
-                            placeholder="Ask a question"
-                            className="flex-1 bg-transparent text-white placeholder:text-zinc-500 border-none focus:outline-none text-sm min-w-0"
-                        />
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                            <button
-                                className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
-                                aria-label="Add attachment"
-                            >
-                                <Plus className="h-4 w-4" />
-                            </button>
-                            <button
-                                className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
-                                aria-label="Add image"
-                            >
-                                <Camera className="h-4 w-4" />
-                            </button>
-                            <button
-                                className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
-                                aria-label="Voice input"
-                            >
-                                <Mic className="h-4 w-4" />
-                            </button>
-                            <button
-                                onClick={() => {
-                                    if (input.trim()) {
-                                        setCurrentView('aiChat')
-                                        handleSend()
-                                    }
-                                }}
-                                disabled={!input.trim()}
-                                className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                                aria-label="Send message"
-                            >
-                                <ArrowUp className="h-4 w-4" />
-                            </button>
+            
+            {/* Keyboard shortcut flash notification */}
+            {showShortcutFlash && (
+                <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl px-6 py-3 shadow-2xl">
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5">
+                                <kbd className="px-2 py-1 text-sm font-mono bg-zinc-800 rounded-lg border border-zinc-600 shadow-inner">⌘</kbd>
+                                <kbd className="px-2 py-1 text-sm font-mono bg-zinc-800 rounded-lg border border-zinc-600 shadow-inner">↵</kbd>
+                            </div>
+                            <span className="text-sm text-zinc-300 font-medium">Proceed</span>
                         </div>
                     </div>
                 </div>

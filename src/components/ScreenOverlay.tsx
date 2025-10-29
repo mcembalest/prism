@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { listen } from '@tauri-apps/api/event'
-import type { Point, BoundingBox } from '@/types/walkthrough'
+import type { Point } from '@/types/walkthrough'
 
 interface OverlayData {
     points: Point[]
-    boxes: BoundingBox[]
     walkthroughSteps?: number
     currentStep?: number
     instruction?: string
@@ -45,37 +44,6 @@ function OverlayPoint({ point, index, isPrevious, caption }: { point: Point; ind
     )
 }
 
-// Reusable component for rendering overlay boxes
-function OverlayBox({ box, index, isPrevious, caption }: { box: BoundingBox; index: number; isPrevious?: boolean; caption?: string }) {
-    const baseClasses = "absolute border-green-500 shadow-2xl"
-    const sizeClasses = isPrevious ? "border-4 bg-green-500/5" : "border-4 bg-green-400/15 scale-105"
-    const opacityClass = isPrevious ? "opacity-30" : "opacity-100 transition-all duration-500"
-
-    return (
-        <div
-            key={`${isPrevious ? 'prev-' : ''}box-${index}`}
-            className={`${baseClasses} ${sizeClasses} ${opacityClass}`}
-            style={{
-                left: `${box.xMin * 100}%`,
-                top: `${box.yMin * 100}%`,
-                width: `${(box.xMax - box.xMin) * 100}%`,
-                height: `${(box.yMax - box.yMin) * 100}%`,
-                zIndex: isPrevious ? 8900 : 9000,
-            }}
-        >
-            {!isPrevious && (
-                <>
-                    <div className="absolute inset-0 border-2 border-green-300 animate-pulse" style={{ animationDuration: '1.5s' }} />
-                    {caption && (
-                        <div className="absolute -top-8 left-0 bg-green-500 text-white text-sm px-3 py-1 rounded shadow-lg whitespace-nowrap font-medium">
-                            {caption}
-                        </div>
-                    )}
-                </>
-            )}
-        </div>
-    )
-}
 
 export function ScreenOverlay() {
     const [data, setData] = useState<OverlayData | null>(null)
@@ -139,19 +107,12 @@ export function ScreenOverlay() {
                     {previousData.points.map((point, idx) => (
                         <OverlayPoint key={`prev-point-${idx}`} point={point} index={idx} isPrevious />
                     ))}
-                    {previousData.boxes.map((box, idx) => (
-                        <OverlayBox key={`prev-box-${idx}`} box={box} index={idx} isPrevious />
-                    ))}
                 </>
             )}
 
             {/* Render current step (highlighted with fade-in) */}
             {data.points.map((point, idx) => (
                 <OverlayPoint key={`point-${idx}`} point={point} index={idx} caption={data.caption} />
-            ))}
-
-            {data.boxes.map((box, idx) => (
-                <OverlayBox key={`box-${idx}`} box={box} index={idx} caption={data.caption} />
             ))}
 
             {/* Step counter and instruction for walkthroughs */}
