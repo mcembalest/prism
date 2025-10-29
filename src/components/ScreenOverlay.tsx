@@ -14,8 +14,8 @@ interface OverlayData {
 
 // Reusable component for rendering overlay points
 function OverlayPoint({ point, index, isPrevious, caption }: { point: Point; index: number; isPrevious?: boolean; caption?: string }) {
-    const baseClasses = "absolute rounded-full bg-red-500 border-white shadow-2xl transform -translate-x-1/2 -translate-y-1/2"
-    const sizeClasses = isPrevious ? "w-6 h-6 border-3" : "w-8 h-8 border-4 animate-pulse scale-110"
+    const baseClasses = "absolute shadow-2xl"
+    const sizeClasses = isPrevious ? "w-6 h-8" : "w-8 h-10 animate-pulse scale-110"
     const opacityClass = isPrevious ? "opacity-30" : "opacity-100 transition-all duration-500"
 
     return (
@@ -29,10 +29,35 @@ function OverlayPoint({ point, index, isPrevious, caption }: { point: Point; ind
                 animation: isPrevious ? 'none' : 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             }}
         >
+            {/* 2x smaller, much narrower and slightly shorter Cursor SVG Icon */}
+            <svg
+                viewBox="0 0 10 14"
+                fill="none"
+                className="w-full h-full drop-shadow-lg"
+                style={{ filter: 'drop-shadow(0 0 2px rgba(239, 68, 68, 0.4))', width: '50%', height: '50%' }}
+            >
+                <path
+                    d="M2.5 1.0V13L5 8.3L7 12.5L8.6 11.7L6 7.5L10 6.7L2.5 1Z"
+                    fill="#EF4444"
+                    stroke="white"
+                    strokeWidth="0.7"
+                    strokeLinejoin="round"
+                />
+            </svg>
+
             {!isPrevious && (
                 <>
-                    <div className="absolute inset-0 rounded-full border-2 border-red-400 animate-ping" style={{ animationDuration: '1.5s' }} />
-                    <div className="absolute inset-0 rounded-full border border-red-400 opacity-30" />
+                    {/* Glow effect */}
+                    <div className="absolute inset-0 animate-ping opacity-75" style={{ animationDuration: '1.5s' }}>
+                        <svg viewBox="0 0 24 32" fill="none" className="w-full h-full">
+                            <path
+                                d="M5.5 3.21V28.78L12.5 20.22L17.5 27.78L21.5 25.78L16.5 18.22L24.5 17.22L5.5 3.21Z"
+                                fill="none"
+                                stroke="#F87171"
+                                strokeWidth="2"
+                            />
+                        </svg>
+                    </div>
                     {caption && (
                         <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-sm px-3 py-1 rounded shadow-lg whitespace-nowrap font-medium">
                             {caption}
