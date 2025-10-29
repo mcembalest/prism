@@ -1,197 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Button } from '@/components/ui/button'
 import { RadialProgress } from '@/components/ui/radial-progress'
-import { Send, Play, Check, ArrowLeft, Plus, Camera, Mic, ArrowUp } from 'lucide-react'
+import { Check, ArrowLeft, Plus, Camera, Mic, ArrowUp } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { geminiService } from '@/services/gemini'
-import type { Point, BoundingBox, Message, WalkthroughStep, WalkthroughSession, PrebuiltGuide, PrebuiltGuideSession } from '@/types/walkthrough'
-
-// Hard-coded guide data
-const PREBUILT_GUIDES: PrebuiltGuide[] = [
-    {
-        id: 'review-pr',
-        title: 'Review a pull request',
-        topic: 'Git Basics',
-        description: 'Learn how to review code changes in a pull request on GitHub',
-        isRecent: true,
-        steps: [
-            {
-                caption: 'Open PR tab',
-                instruction: 'Navigate to the Pull Requests (PR) tab',
-                points: [{ x: 0.20, y: 0.20 }]
-            },
-            {
-                caption: 'Pick a PR',
-                instruction: 'Click on the PR you want to review.',
-                observation: 'Looks like you have two open PRs here.',
-                points: [{ x: 0.25, y: 0.5 }]
-            },
-            {
-                caption: 'Open Files tab',
-                instruction: 'Click the Files changed tab',
-                points: [{ x: 0.42, y: 0.35 }]
-            },
-            {
-                caption: 'Read code',
-                instruction: 'At this point in a PR review, you read the code diffs (changes in the code).',
-                observation: 'Looks like this is a simple change to the README file.',
-                points: [{ x: 0.35, y: 0.6 }]
-            },
-            {
-                caption: 'Review changes',
-                instruction: 'Click the Review changes button',
-                points: [{ x: 0.88, y: 0.39 }]
-            },
-            {
-                caption: 'Add comment',
-                instruction: 'Add your review comment and choose review type',
-                points: [{ x: 0.88, y: 0.55 }]
-            },
-            {
-                caption: 'Submit',
-                instruction: 'Click Submit review',
-                points: [{ x: 0.89, y: 0.83 }]
-            }
-        ]
-    },
-    {
-        id: 'init-repo',
-        title: 'Initialize a new repository',
-        topic: 'Git Basics',
-        description: 'Create a new Git repository from scratch',
-        isRecent: true,
-        isCompleted: false,
-        steps: [
-            {
-                instruction: 'Open Terminal and navigate to your project directory using cd < folder >',
-                hint: 'Use the cd command to change directories. For example: cd ~/Documents/my-project',
-                boxes: [{ xMin: 0.1, yMin: 0.1, xMax: 0.9, yMax: 0.2 }]
-            },
-            {
-                instruction: 'Run git init to initialize an empty repository',
-                hint: 'This creates a new .git subdirectory in your project with all necessary repository files',
-                boxes: [{ xMin: 0.1, yMin: 0.3, xMax: 0.9, yMax: 0.4 }]
-            },
-            {
-                instruction: 'Add files to staging with git add .',
-                hint: 'The dot (.) adds all files. You can also specify individual files',
-                boxes: [{ xMin: 0.1, yMin: 0.5, xMax: 0.9, yMax: 0.6 }]
-            },
-            {
-                instruction: 'Create your first commit with git commit -m "Initial commit"',
-                hint: 'The -m flag lets you add a commit message inline',
-                boxes: [{ xMin: 0.1, yMin: 0.7, xMax: 0.9, yMax: 0.8 }]
-            }
-        ]
-    },
-    {
-        id: 'clone-repo',
-        title: 'Clone an existing repository',
-        topic: 'Git Basics',
-        steps: [
-            {
-                instruction: 'Find the repository URL on GitHub',
-                hint: 'Click the green "Code" button and copy the HTTPS or SSH URL',
-                points: [{ x: 0.85, y: 0.2 }]
-            },
-            {
-                instruction: 'Open Terminal and navigate to where you want the repo',
-                hint: 'Use cd to navigate to your desired parent directory',
-                boxes: [{ xMin: 0.1, yMin: 0.1, xMax: 0.9, yMax: 0.2 }]
-            },
-            {
-                instruction: 'Run git clone <url>',
-                hint: 'Paste the URL you copied. This creates a new directory with the repo name',
-                boxes: [{ xMin: 0.1, yMin: 0.3, xMax: 0.9, yMax: 0.4 }]
-            }
-        ]
-    },
-    {
-        id: 'make-commit',
-        title: 'Make a commit',
-        topic: 'Git Basics',
-        steps: [
-            {
-                instruction: 'Make changes to your files',
-                hint: 'Edit, add, or delete files in your project',
-                boxes: [{ xMin: 0.1, yMin: 0.2, xMax: 0.9, yMax: 0.6 }]
-            },
-            {
-                instruction: 'Stage your changes with git add',
-                hint: 'Use git add . for all changes or git add <filename> for specific files',
-                boxes: [{ xMin: 0.1, yMin: 0.3, xMax: 0.9, yMax: 0.4 }]
-            },
-            {
-                instruction: 'Commit with git commit -m "Your message"',
-                hint: 'Write a clear, concise commit message describing what changed',
-                boxes: [{ xMin: 0.1, yMin: 0.5, xMax: 0.9, yMax: 0.6 }]
-            }
-        ]
-    },
-    {
-        id: 'push-commits',
-        title: 'Push Commits to GitHub',
-        topic: 'Git Basics',
-        steps: [
-            {
-                instruction: 'Ensure you have commits to push',
-                hint: 'Run git status to see if you have commits that aren\'t on the remote',
-                boxes: [{ xMin: 0.1, yMin: 0.2, xMax: 0.9, yMax: 0.3 }]
-            },
-            {
-                instruction: 'Run git push origin main',
-                hint: 'Replace "main" with your branch name if different. You may need to authenticate',
-                boxes: [{ xMin: 0.1, yMin: 0.4, xMax: 0.9, yMax: 0.5 }]
-            }
-        ]
-    },
-    {
-        id: 'onboarding',
-        title: 'Onboarding',
-        topic: 'Getting Started',
-        isRecent: true,
-        isCompleted: true,
-        steps: [
-            {
-                instruction: 'Welcome to the platform!',
-                hint: 'This is a sample completed guide'
-            }
-        ]
-    }
-]
-
-const TOPICS = [
-    {
-        id: 'git-basics',
-        name: 'Git Basics',
-        description: 'Learn the basics of using GitHub to collaborate on code repositories.',
-        icon: '▷'
-    },
-    {
-        id: 'conflict-resolution',
-        name: 'Conflict Resolution',
-        icon: '▷'
-    },
-    {
-        id: 'branching-merging',
-        name: 'Branching and merging',
-        icon: '▷'
-    },
-    {
-        id: 'github-cli',
-        name: 'GitHub CLI',
-        icon: '▷'
-    },
-    {
-        id: 'issues-templates',
-        name: 'Issues and Templates',
-        icon: '▷'
-    }
-]
+import type { Point, BoundingBox, Message, WalkthroughStep, WalkthroughSession, PrebuiltGuideSession } from '@/types/walkthrough'
+import { getModeConfig, defaultMode } from '@/config/modes'
 
 export function Helper() {
+    // Mode is set in code only - change defaultMode in config/modes/index.ts
+    const modeConfig = getModeConfig(defaultMode)
+    
+    // Get guides and topics from current mode
+    const PREBUILT_GUIDES = modeConfig.guides
+    const TOPICS = modeConfig.topics
+
     // View management
     type ViewType = 'landing' | 'topic' | 'activeGuide' | 'aiChat'
     const [currentView, setCurrentView] = useState<ViewType>('landing')
@@ -549,7 +373,8 @@ export function Helper() {
             const stepResult = await geminiService.walkthroughNextStep(
                 screenshotDataUrl,
                 session.goal,
-                previousSteps
+                previousSteps,
+                modeConfig.aiContextPrompt
             )
 
             console.log('[Proceed Handler] AI response:', {
@@ -762,7 +587,7 @@ export function Helper() {
         const screenshot = await takeScreenshot()
         setStatusMessage(`Starting walkthrough for "${query}"...`)
 
-        const stepResult = await geminiService.walkthroughNextStep(screenshot, query, [])
+        const stepResult = await geminiService.walkthroughNextStep(screenshot, query, [], modeConfig.aiContextPrompt)
 
         const firstStep: WalkthroughStep = {
             stepNumber: 1,
@@ -821,7 +646,7 @@ export function Helper() {
 
             let mockResponse = ''
             if (currentView === 'landing') {
-                mockResponse = "I can help you get started! Try selecting one of the guides above, or ask me a specific question about GitHub workflows."
+                mockResponse = modeConfig.welcomeMessage || "I can help you get started! Try selecting one of the guides above, or ask me a question."
             } else if (currentView === 'activeGuide') {
                 const guideName = prebuiltGuideSession?.guide.title || 'this guide'
                 const currentStep = prebuiltGuideSession ? prebuiltGuideSession.currentStepIndex + 1 : 1

@@ -273,7 +273,8 @@ class GeminiService {
   async walkthroughNextStep(
     imageDataUrl: string,
     goal: string,
-    previousSteps: string[]
+    previousSteps: string[],
+    appContext?: string
   ): Promise<WalkthroughStepResult> {
     const inline = dataUrlToInlineData(imageDataUrl)
 
@@ -282,8 +283,12 @@ class GeminiService {
       ? `Previous steps completed:\n${previousSteps.map((step, i) => `${i + 1}. ${step}`).join('\n')}\n\n`
       : ''
 
+    // Add app context if provided
+    const appContextText = appContext ? `${appContext}\n\n` : ''
+
     const prompt = [
       'You are helping a user achieve a goal through a step-by-step walkthrough.',
+      appContextText,
       `User\'s goal: ${goal}`,
       '',
       contextText,

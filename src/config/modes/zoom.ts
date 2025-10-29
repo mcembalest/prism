@@ -1,0 +1,121 @@
+// Zoom mode configuration
+import type { AppModeConfig } from '@/types/app-mode'
+import type { PrebuiltGuide } from '@/types/walkthrough'
+
+const guides: PrebuiltGuide[] = [
+  {
+    id: 'join-meeting',
+    title: 'Join a Zoom meeting',
+    topic: 'Getting Started',
+    description: 'Learn how to join a Zoom video conference',
+    isRecent: true,
+    steps: [
+      {
+        caption: 'Click Join',
+        instruction: 'Click the "Join" button in the Zoom application',
+        points: [{ x: 0.5, y: 0.4 }]
+      },
+      {
+        caption: 'Enter Meeting ID',
+        instruction: 'Enter the meeting ID provided by the host',
+        points: [{ x: 0.5, y: 0.55 }]
+      },
+      {
+        caption: 'Join Meeting',
+        instruction: 'Click "Join" to enter the meeting',
+        points: [{ x: 0.5, y: 0.7 }]
+      }
+    ]
+  },
+  {
+    id: 'start-meeting',
+    title: 'Start a new meeting',
+    topic: 'Hosting',
+    description: 'Learn how to start your own Zoom meeting',
+    isRecent: true,
+    steps: [
+      {
+        instruction: 'Click "New Meeting" in the Zoom application',
+        points: [{ x: 0.3, y: 0.3 }]
+      },
+      {
+        instruction: 'Choose whether to start with video on or off',
+        points: [{ x: 0.5, y: 0.45 }]
+      },
+      {
+        instruction: 'Your meeting will start immediately',
+        observation: 'You can now invite others or share your screen.'
+      }
+    ]
+  },
+  {
+    id: 'share-screen',
+    title: 'Share your screen',
+    topic: 'Hosting',
+    steps: [
+      {
+        instruction: 'Click the "Share Screen" button at the bottom of the meeting window',
+        points: [{ x: 0.75, y: 0.95 }]
+      },
+      {
+        instruction: 'Select which screen or window you want to share',
+        points: [{ x: 0.5, y: 0.45 }]
+      },
+      {
+        instruction: 'Click "Share" to begin sharing',
+        points: [{ x: 0.8, y: 0.85 }]
+      }
+    ]
+  },
+  {
+    id: 'mute-unmute',
+    title: 'Mute and unmute audio',
+    topic: 'Basics',
+    steps: [
+      {
+        instruction: 'Click the microphone icon at the bottom left to mute or unmute',
+        points: [{ x: 0.15, y: 0.95 }]
+      },
+      {
+        instruction: 'The microphone icon will show your current mute status',
+        observation: 'When muted, you\'ll see a red slash through the icon.'
+      }
+    ]
+  }
+]
+
+const topics = [
+  {
+    id: 'getting-started',
+    name: 'Getting Started',
+    description: 'Learn the basics of joining and participating in Zoom meetings',
+    icon: '▷'
+  },
+  {
+    id: 'hosting',
+    name: 'Hosting',
+    description: 'Learn how to host and manage Zoom meetings',
+    icon: '▷'
+  },
+  {
+    id: 'basics',
+    name: 'Basic Features',
+    icon: '▷'
+  },
+  {
+    id: 'advanced',
+    name: 'Advanced Features',
+    icon: '▷'
+  }
+]
+
+export const zoomMode: AppModeConfig = {
+  id: 'zoom',
+  name: 'Zoom',
+  description: 'Learn how to use Zoom for video conferencing',
+  guides,
+  topics,
+  welcomeMessage: "I can help you get started! Try selecting one of the guides above, or ask me a specific question about using Zoom.",
+  aiContextPrompt: "The user is working with Zoom video conferencing software. When providing guidance, assume they are using the Zoom desktop or web application."
+}
+
