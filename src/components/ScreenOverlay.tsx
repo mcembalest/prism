@@ -15,7 +15,7 @@ interface OverlayData {
 // Reusable component for rendering overlay points
 function OverlayPoint({ point, index, isPrevious, caption }: { point: Point; index: number; isPrevious?: boolean; caption?: string }) {
     const baseClasses = "absolute shadow-2xl"
-    const sizeClasses = isPrevious ? "w-6 h-8" : "w-8 h-10 animate-pulse scale-110"
+    const sizeClasses = isPrevious ? "w-6 h-8" : "w-8 h-10"
     const opacityClass = isPrevious ? "opacity-30" : "opacity-100 transition-all duration-500"
 
     return (
@@ -26,7 +26,6 @@ function OverlayPoint({ point, index, isPrevious, caption }: { point: Point; ind
                 left: `${point.x * 100}%`,
                 top: `${point.y * 100}%`,
                 zIndex: isPrevious ? 8900 : 9000,
-                animation: isPrevious ? 'none' : 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             }}
         >
             {/* 2x smaller, much narrower and slightly shorter Cursor SVG Icon */}
@@ -37,7 +36,7 @@ function OverlayPoint({ point, index, isPrevious, caption }: { point: Point; ind
                 style={{ filter: 'drop-shadow(0 0 2px rgba(239, 68, 68, 0.4))', width: '50%', height: '50%' }}
             >
                 <path
-                    d="M2.5 1.0V13L5 8.3L7 12.5L8.6 11.7L6 7.5L10 6.7L2.5 1Z"
+                    d="M2.5 1.0V11.5L5 8.0L7 12.2L8.6 11.7L6 7.5L10 6.7L2.5 1Z"
                     fill="#EF4444"
                     stroke="white"
                     strokeWidth="0.7"
@@ -45,25 +44,10 @@ function OverlayPoint({ point, index, isPrevious, caption }: { point: Point; ind
                 />
             </svg>
 
-            {!isPrevious && (
-                <>
-                    {/* Glow effect */}
-                    <div className="absolute inset-0 animate-ping opacity-75" style={{ animationDuration: '1.5s' }}>
-                        <svg viewBox="0 0 24 32" fill="none" className="w-full h-full">
-                            <path
-                                d="M5.5 3.21V28.78L12.5 20.22L17.5 27.78L21.5 25.78L16.5 18.22L24.5 17.22L5.5 3.21Z"
-                                fill="none"
-                                stroke="#F87171"
-                                strokeWidth="2"
-                            />
-                        </svg>
-                    </div>
-                    {caption && (
-                        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-sm px-3 py-1 rounded shadow-lg whitespace-nowrap font-medium">
-                            {caption}
-                        </div>
-                    )}
-                </>
+            {!isPrevious && caption && (
+                <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-sm px-3 py-1 rounded shadow-lg whitespace-nowrap font-medium">
+                    {caption}
+                </div>
             )}
         </div>
     )
@@ -72,21 +56,13 @@ function OverlayPoint({ point, index, isPrevious, caption }: { point: Point; ind
 
 export function ScreenOverlay() {
     const [data, setData] = useState<OverlayData | null>(null)
-    const [previousData, setPreviousData] = useState<OverlayData | null>(null)
 
     useEffect(() => {
         // Listen for the overlay data
         const setupListener = async () => {
             try {
                 const unlisten = await listen<OverlayData>('overlay-data', (event) => {
-                    setData(prevData => {
-                        // Show previous step briefly for transition effect
-                        if (prevData && prevData.currentStep !== event.payload.currentStep) {
-                            setPreviousData(prevData)
-                            setTimeout(() => setPreviousData(null), 600)
-                        }
-                        return event.payload
-                    })
+                    setData(event.payload)
                 })
 
                 // Signal that we're ready to receive data
@@ -126,16 +102,7 @@ export function ScreenOverlay() {
 
     return (
         <div className="fixed inset-0 pointer-events-none">
-            {/* Render previous step (dimmed ghost) */}
-            {previousData && (
-                <>
-                    {previousData.points.map((point, idx) => (
-                        <OverlayPoint key={`prev-point-${idx}`} point={point} index={idx} isPrevious />
-                    ))}
-                </>
-            )}
-
-            {/* Render current step (highlighted with fade-in) */}
+            {/* Render current step */}
             {data.points.map((point, idx) => (
                 <OverlayPoint key={`point-${idx}`} point={point} index={idx} caption={data.caption} />
             ))}

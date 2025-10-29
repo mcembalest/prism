@@ -31,7 +31,7 @@ const PREBUILT_GUIDES: PrebuiltGuide[] = [
             {
                 caption: 'Open Files tab',
                 instruction: 'Click the Files changed tab',
-                points: [{ x: 0.45, y: 0.37 }]
+                points: [{ x: 0.42, y: 0.35 }]
             },
             {
                 caption: 'Read code',
@@ -52,7 +52,7 @@ const PREBUILT_GUIDES: PrebuiltGuide[] = [
             {
                 caption: 'Submit',
                 instruction: 'Click Submit review',
-                points: [{ x: 0.9, y: 0.85 }]
+                points: [{ x: 0.89, y: 0.83 }]
             }
         ]
     },
