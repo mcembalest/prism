@@ -39,8 +39,12 @@ export function RadialProgress({ progress, hasSkipped, size = 24 }: RadialProgre
   const largeArcFlag = clampedProgress > 0.5 ? 1 : 0
 
   // Create the pie slice path
+  // Special case: when progress is 1.0, draw a full circle instead of an arc
+  // (arc paths don't work when start and end points are the same)
   const piePath = clampedProgress === 0
     ? ''
+    : clampedProgress >= 0.9999
+    ? '' // Will render full circle instead
     : `M ${center} ${center} L ${center} 0 A ${radius} ${radius} 0 ${largeArcFlag} 1 ${endX} ${endY} Z`
 
   return (
@@ -53,14 +57,24 @@ export function RadialProgress({ progress, hasSkipped, size = 24 }: RadialProgre
           r={radius}
           fill="#3f3f46"
         />
-        {/* Progress pie slice */}
-        {clampedProgress > 0 && (
+        {/* Progress pie slice or full circle when complete */}
+        {clampedProgress >= 0.9999 ? (
+          // Full circle when progress is 100%
+          <circle
+            cx={center}
+            cy={center}
+            r={radius}
+            fill={color}
+            className="transition-all duration-300"
+          />
+        ) : clampedProgress > 0 ? (
+          // Pie slice for partial progress
           <path
             d={piePath}
             fill={color}
             className="transition-all duration-300"
           />
-        )}
+        ) : null}
       </svg>
     </div>
   )

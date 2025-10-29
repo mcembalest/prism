@@ -222,11 +222,23 @@ export function Helper() {
     const isExecutingShortcut = useRef<boolean>(false)
     const streamingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
+    // Auto-scroll to bottom when messages change
     useEffect(() => {
         if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+            // Find the ScrollArea viewport (Radix UI uses [data-radix-scroll-area-viewport])
+            const viewport = scrollRef.current.closest('[data-radix-scroll-area-viewport]') as HTMLElement
+            if (viewport) {
+                // Smooth scroll to bottom
+                viewport.scrollTo({
+                    top: viewport.scrollHeight,
+                    behavior: 'smooth'
+                })
+            } else {
+                // Fallback to scrolling the ref itself
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+            }
         }
-    }, [messages])
+    }, [messages, streamingObservation])
 
     // Listen for global keyboard shortcut to proceed to next step
     useEffect(() => {
@@ -695,7 +707,7 @@ export function Helper() {
                     streamingIntervalRef.current = null
                     setStreamingMessageId(null)
                 }
-            }, 15) // 35ms per character (~1.2 seconds for a 35-char observation)
+            }, 10)
 
             streamingIntervalRef.current = streamInterval
         }, 2500) // 2.5 second delay before observation appears
@@ -871,8 +883,8 @@ export function Helper() {
     const renderLandingView = () => (
         <div className="flex-1 flex flex-col overflow-hidden">
             <div className="p-6 border-b border-zinc-800/50">
-                <h1 className="text-3xl font-bold text-white text-center mb-2">Learn GitHub</h1>
-                <p className="text-sm text-zinc-400 text-center">Type a question or choose from existing guides</p>
+                <h1 className="text-3xl font-bold text-white text-center mb-2">How can I help?</h1>
+                <p className="text-sm text-zinc-400 text-center">Ask a question or choose a guide</p>
             </div>
 
             <ScrollArea className="flex-1 h-0">
@@ -1224,25 +1236,12 @@ export function Helper() {
                         {/* Completion message */}
                         {isComplete && (
                         <div className="flex justify-start">
-                        <div className="max-w-[85%] rounded-2xl p-3.5 shadow-lg bg-green-900/20 border border-green-700/50 text-center">
-                        <Check className="h-8 w-8 text-green-400 mx-auto mb-2" />
-                        <p className="text-sm text-green-300 font-semibold">Guide Complete!</p>
-                        <button
-                                onClick={async () => {
-                                        setMessages([])
-                                            setPrebuiltGuideSession(null)
-                                            setCurrentView('landing')
-                                            if (overlayWindowExistsRef.current) {
-                                                await invoke('close_screen_overlay')
-                                                overlayWindowExistsRef.current = false
-                                            }
-                                        }}
-                                        className="mt-3 text-xs text-zinc-400 hover:text-zinc-200"
-                                    >
-                                        Return to guides
-                                    </button>
-                                </div>
+                            <div className="max-w-[85%] rounded-2xl p-3.5 shadow-lg bg-green-900/20 border border-green-700/50 text-center">
+                            <Check className="h-8 w-8 text-green-400 mx-auto mb-2" />
+                                <p className="text-sm text-green-300 font-semibold">Guide Complete!</p>
+                        
                             </div>
+                        </div>
                         )}
                     </div>
                 </ScrollArea>
