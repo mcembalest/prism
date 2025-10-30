@@ -6,7 +6,7 @@ const guides: PrebuiltGuide[] = [
   {
     id: 'review-pr',
     title: 'Review a pull request',
-    topic: 'Git Basics',
+    topic: 'GitHub Basics',
     description: 'Learn how to review code changes in a pull request on GitHub',
     isRecent: true,
     steps: [
@@ -50,93 +50,50 @@ const guides: PrebuiltGuide[] = [
     ]
   },
   {
-    id: 'init-repo',
-    title: 'Initialize a new repository',
-    topic: 'Git Basics',
-    description: 'Create a new Git repository from scratch',
+    id: 'github-ui-tutorial',
+    title: 'Create a repository using the GitHub UI',
+    topic: 'GitHub Basics',
+    description: 'Learn how to create a new repository step-by-step using GitHub’s website.',
     isRecent: true,
     isCompleted: false,
     steps: [
+      
       {
-        instruction: 'Open Terminal and navigate to your project directory using cd < folder >',
-        hint: 'Use the cd command to change directories. For example: cd ~/Documents/my-project',
-        points: [{ x: 0.5, y: 0.15 }]
+        caption: 'Open menu',
+        instruction: 'Click the "+" icon in the top right of GitHub.',
+        points: [{ x: 0.96, y: 0.08 }]
       },
       {
-        instruction: 'Run git init to initialize an empty repository',
-        hint: 'This creates a new .git subdirectory in your project with all necessary repository files',
-        points: [{ x: 0.5, y: 0.35 }]
+        caption: 'Select "New repository"',
+        instruction: 'From the dropdown menu, select "New repository".',
+        points: [{ x: 0.93, y: 0.13 }]
       },
       {
-        instruction: 'Add files to staging with git add .',
-        hint: 'The dot (.) adds all files. You can also specify individual files',
-        points: [{ x: 0.5, y: 0.55 }]
+        caption: 'Name Repository',
+        instruction: 'Enter a unique Repository name.',
+        points: [{ x: 0.4, y: 0.30 }],
+        observation: 'Repository names must be unique to your account.'
       },
       {
-        instruction: 'Create your first commit with git commit -m "Initial commit"',
-        hint: 'The -m flag lets you add a commit message inline',
-        points: [{ x: 0.5, y: 0.75 }]
-      }
-    ]
-  },
-  {
-    id: 'clone-repo',
-    title: 'Clone an existing repository',
-    topic: 'Git Basics',
-    steps: [
-      {
-        instruction: 'Find the repository URL on GitHub',
-        hint: 'Click the green "Code" button and copy the HTTPS or SSH URL',
-        points: [{ x: 0.85, y: 0.2 }]
+        caption: 'Add Description',
+        instruction: 'Optionally, enter a description for your repository.',
+        points: [{ x: 0.4, y: 0.35 }]
       },
       {
-        instruction: 'Open Terminal and navigate to where you want the repo',
-        hint: 'Use cd to navigate to your desired parent directory',
-        points: [{ x: 0.5, y: 0.15 }]
+        caption: 'Choose Visibility',
+        instruction: 'Select repository visibility: Public or Private.',
+        points: [{ x: 0.4, y: 0.40 }]
       },
       {
-        instruction: 'Run git clone <url>',
-        hint: 'Paste the URL you copied. This creates a new directory with the repo name',
-        points: [{ x: 0.5, y: 0.35 }]
-      }
-    ]
-  },
-  {
-    id: 'make-commit',
-    title: 'Make a commit',
-    topic: 'Git Basics',
-    steps: [
-      {
-        instruction: 'Make changes to your files',
-        hint: 'Edit, add, or delete files in your project',
-        points: [{ x: 0.5, y: 0.4 }]
+        caption: 'Initialize Repository',
+        instruction: 'Optionally check "Add a README file" to give your repository a home page document.',
+        points: [{ x: 0.43, y: 0.58 }],
+        hint: 'Adding a README makes your repository easier to understand.'
       },
       {
-        instruction: 'Stage your changes with git add',
-        hint: 'Use git add . for all changes or git add <filename> for specific files',
-        points: [{ x: 0.5, y: 0.35 }]
-      },
-      {
-        instruction: 'Commit with git commit -m "Your message"',
-        hint: 'Write a clear, concise commit message describing what changed',
-        points: [{ x: 0.5, y: 0.55 }]
-      }
-    ]
-  },
-  {
-    id: 'push-commits',
-    title: 'Push Commits to GitHub',
-    topic: 'Git Basics',
-    steps: [
-      {
-        instruction: 'Ensure you have commits to push',
-        hint: 'Run git status to see if you have commits that aren\'t on the remote',
-        points: [{ x: 0.5, y: 0.25 }]
-      },
-      {
-        instruction: 'Run git push origin main',
-        hint: 'Replace "main" with your branch name if different. You may need to authenticate',
-        points: [{ x: 0.5, y: 0.45 }]
+        caption: 'Create Repo',
+        instruction: 'Click the "Create repository" button to finish.',
+        points: [{ x: 0.45, y: 0.72 }]
       }
     ]
   },
@@ -148,8 +105,8 @@ const guides: PrebuiltGuide[] = [
     isCompleted: true,
     steps: [
       {
-        instruction: 'Welcome to the platform!',
-        hint: 'This is a sample completed guide'
+        instruction: 'Welcome!',
+        hint: 'This is a sample onboarding guide'
       }
     ]
   }
@@ -157,31 +114,16 @@ const guides: PrebuiltGuide[] = [
 
 const topics = [
   {
-    id: 'git-basics',
-    name: 'Git Basics',
-    description: 'Learn the basics of using GitHub to collaborate on code repositories.',
+    id: 'github-basics',
+    name: 'GitHub Basics',
+    description: 'Use GitHub to collaborate on code repositories.',
     icon: '▷'
   },
   {
-    id: 'conflict-resolution',
-    name: 'Conflict Resolution',
+    id: 'git-cli',
+    name: 'Git CLI',
     icon: '▷'
   },
-  {
-    id: 'branching-merging',
-    name: 'Branching and merging',
-    icon: '▷'
-  },
-  {
-    id: 'github-cli',
-    name: 'GitHub CLI',
-    icon: '▷'
-  },
-  {
-    id: 'issues-templates',
-    name: 'Issues and Templates',
-    icon: '▷'
-  }
 ]
 
 export const githubMode: AppModeConfig = {

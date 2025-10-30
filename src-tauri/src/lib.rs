@@ -2,6 +2,7 @@ use screenshots::Screen;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_decorum::WebviewWindowExt;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState};
@@ -220,6 +221,12 @@ async fn open_screen_overlay(
 
     // Make window click-through (ignore cursor events)
     let _ = window.set_ignore_cursor_events(true);
+
+    // Set window level above popup menus (macOS only)
+    #[cfg(target_os = "macos")]
+    {
+        let _ = window.set_window_level(102);
+    }
 
     let payload = OverlayPayload {
         points,

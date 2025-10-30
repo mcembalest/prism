@@ -30,13 +30,13 @@ function OverlayPoint({ point, index, isPrevious, caption }: { point: Point; ind
         >
             {/* 2x smaller, much narrower and slightly shorter Cursor SVG Icon */}
             <svg
-                viewBox="0 0 10 14"
+                viewBox="0 0 8 14"
                 fill="none"
                 className="w-full h-full drop-shadow-lg"
                 style={{ filter: 'drop-shadow(0 0 2px rgba(239, 68, 68, 0.4))', width: '50%', height: '50%' }}
             >
                 <path
-                    d="M2.5 1.0V11.5L5 8.0L7 12.2L8.6 11.7L6 7.5L10 6.7L2.5 1Z"
+                    d="M2 1.0V11.5L4.2 8.0L5.8 12.2L7.2 11.7L5 7.5L8 6.7L2 1Z"
                     fill="#EF4444"
                     stroke="white"
                     strokeWidth="0.7"

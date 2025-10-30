@@ -50,7 +50,7 @@ const guides: PrebuiltGuide[] = [
   },
   {
     id: 'share-screen',
-    title: 'Share your screen',
+    title: 'Share screen',
     topic: 'Hosting',
     steps: [
       {
@@ -68,17 +68,19 @@ const guides: PrebuiltGuide[] = [
     ]
   },
   {
-    id: 'mute-unmute',
-    title: 'Mute and unmute audio',
-    topic: 'Basics',
+    id: 'guest-share-screen',
+    title: 'Guest share screen',
+    topic: 'Hosting',
+    description: 'Learn how to let a guest share their screen in a Zoom meeting',
+    isRecent: true,
     steps: [
       {
-        instruction: 'Click the microphone icon at the bottom left to mute or unmute',
-        points: [{ x: 0.15, y: 0.95 }]
+        instruction: 'Click the carrot in the corner of the "Share Screen" button at the bottom of the Zoom meeting window',
+        points: [{ x: 0.5, y: 0.87 }]
       },
       {
-        instruction: 'The microphone icon will show your current mute status',
-        observation: 'When muted, you\'ll see a red slash through the icon.'
+        instruction: "Click 'Multiple participants can share simultaneously'",
+        points: [{ x: 0.8, y: 0.8 }]
       }
     ]
   }

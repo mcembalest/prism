@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -8,7 +8,6 @@ const STORAGE_KEY = 'Lighthouse_gemini_api_key'
 export function Settings() {
   const [apiKey, setApiKey] = useState('')
   const [saved, setSaved] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     try {
@@ -72,50 +71,12 @@ export function Settings() {
           <div className="space-y-2 mb-6">
             <label htmlFor="gemini" className="text-sm text-zinc-300">Gemini API Key</label>
             <input
-              ref={inputRef}
               id="gemini"
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              onPaste={(e) => {
-                const t = e.clipboardData?.getData('text')
-                if (typeof t === 'string' && t.length > 0) {
-                  e.preventDefault()
-                  const input = inputRef.current
-                  const start = input?.selectionStart ?? apiKey.length
-                  const end = input?.selectionEnd ?? apiKey.length
-                  const newValue = apiKey.slice(0, start) + t + apiKey.slice(end)
-                  setApiKey(newValue)
-                  requestAnimationFrame(() => {
-                    if (input) {
-                      const pos = start + t.length
-                      input.setSelectionRange(pos, pos)
-                    }
-                  })
-                }
-              }}
-              onKeyDown={async (e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') {
-                  try {
-                    const clip = await navigator.clipboard?.readText?.()
-                    if (clip) {
-                      e.preventDefault()
-                      const input = inputRef.current
-                      const start = input?.selectionStart ?? apiKey.length
-                      const end = input?.selectionEnd ?? apiKey.length
-                      const newValue = apiKey.slice(0, start) + clip + apiKey.slice(end)
-                      setApiKey(newValue)
-                      requestAnimationFrame(() => {
-                        if (input) {
-                          const pos = start + clip.length
-                          input.setSelectionRange(pos, pos)
-                        }
-                      })
-                    }
-                  } catch {
-                    // best-effort, ignore
-                  }
-                } else if (e.key === 'Escape') {
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
                   e.preventDefault()
                   handleClose()
                 }

@@ -10,7 +10,7 @@ export const appModes: Record<AppModeId, AppModeConfig> = {
   figma: figmaMode,
 }
 
-export const defaultMode: AppModeId = 'github'
+export const defaultMode: AppModeId = 'zoom'
 
 export function getModeConfig(modeId: AppModeId): AppModeConfig {
   return appModes[modeId] || appModes[defaultMode]
