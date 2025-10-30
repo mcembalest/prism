@@ -4,6 +4,46 @@ import type { PrebuiltGuide } from '@/types/walkthrough'
 
 const guides: PrebuiltGuide[] = [
   {
+    id: 'crop-image',
+    title: 'Crop an image',
+    topic: 'Basics',
+    description: 'Learn how to crop an image in Figma',
+    isRecent: true,
+    steps: [
+      {
+        caption: 'Select Image',
+        instruction: 'Select the image you want to crop',
+        observation: 'I see three images on your canvas - select one by clicking on it.',
+        points: [{ x: 0.5, y: 0.5 }]
+      },
+      {
+        caption: 'Click image in Fill',
+        instruction: 'Click the image icon in Fill in the toolbar',
+        points: [{ x: 0.85, y: 0.73 }]
+      },
+      {
+        caption: 'Click dropdown',
+        instruction: "Click the dropdown that currently says 'Fill' in the image editing window",
+        points: [{ x: 0.65, y: 0.42 }]
+      },
+      {
+        caption: 'Choose crop',
+        instruction: "Change to crop mode by clicking Crop",
+        points: [{ x: 0.65, y: 0.48 }]
+      },
+      {
+        caption: 'Adjust your Image',
+        instruction: 'Adjust the image to your liking by dragging the handles',
+        points: [{ x: 0.5, y: 0.5 }]
+      },
+      {
+        caption: 'Click on background to save',
+        instruction: 'Click outside the editing window on the background canvas to save your image crop edit',
+        points: [{ x: 0.15, y: 0.85 }]
+      },
+    ]
+  },
+  {
     id: 'create-frame',
     title: 'Create a new frame',
     topic: 'Basics',
@@ -111,11 +151,6 @@ const topics = [
   {
     id: 'prototyping',
     name: 'Prototyping',
-    icon: '▷'
-  },
-  {
-    id: 'export',
-    name: 'Export & Handoff',
     icon: '▷'
   },
   {

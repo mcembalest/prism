@@ -281,35 +281,31 @@ flowchart LR
                 <div class="diagram-content">
                     <div class="mermaid">
 flowchart TD
-    Start([User asks for help]) --> Open[Lighthouse opens with suggested guides]
-
+    Start([User requests help]) --> Open[Lighthouse opens]
+    
     Open --> Choice{User action}
     Choice -->|Asks a question| Question[Answer contextually]
-    Choice -->|Selects topic| Topic[Show topic guides]
-    Choice -->|Selects recent guide| Guide
+    Choice -->|Searches for guide| Guide[Start step-by-step guide]
     
-    Question --> OfferGuide{Want a guide<br/>for this?}
+    Question --> OfferGuide{Want a guide?}
     OfferGuide -->|Yes| Guide
-    OfferGuide -->|No| Done
-    
-    Topic --> Guide[Start step-by-step guide]
+    OfferGuide -->|No| Done([Close])
     
     Guide --> DisplayStep[Display Step]
     DisplayStep --> Monitor[Monitor for checkpoint completion]
     
-    Monitor --> Check{Checkpoint reached?}
+    Monitor --> Check{Checkpoint<br/>reached?}
     Check -->|Yes ✓| Next{More steps?}
-    Check -->|No| Options{User chooses}
+    Check -->|No| UserAction{User action}
     
-    Options -->|View hint| UpdateStep[Update step display<br/>with hint]
-    Options -->|Skip step| SkipCheck{Skip feasible?}
+    UserAction -->|Skip step| SkipCheck{Skip feasible?}
+    UserAction -->|Keep trying| Monitor
     
-    UpdateStep --> Monitor
     SkipCheck -->|Yes| Next
     SkipCheck -->|No| Monitor
     
     Next -->|Yes| DisplayStep
-    Next -->|No| Done([Lighthouse closes])
+    Next -->|No| Done
                     </div>
                 </div>
             </div>
@@ -329,67 +325,43 @@ sequenceDiagram
 
     U->>P: Working in product
     U->>HL: Request help
-    Note over HL,P: Lighthouse observes current page/context
-    HL->>KB: Query for suggested guides & topics
-    KB-->>HL: Return guides/topics
-    HL->>U: Display suggestions
+    Note over HL,P: Lighthouse observes current context
+    HL->>U: Lighthouse opens
     
     alt User asks question
         U->>HL: Type question
         HL->>KB: Query for contextual answer
         KB-->>HL: Return answer
         HL->>U: Display answer & offer guide
-        
-        alt User wants guide
+        opt User accepts guide
             U->>HL: Accept guide offer
-            HL->>KB: Fetch guide steps
-            KB-->>HL: Return step-by-step guide
-            Note over U,KB: Continue to guide flow below
-        else No guide needed
-            U->>HL: Dismiss
-            Note over HL: Session ends
         end
-        
-    else User selects guide/topic
-        U->>HL: Select guide or topic
+    else User searches for guide
+        U->>HL: Search for guide
+    end
+    
+    opt Guide selected (from either path)
         HL->>KB: Fetch guide steps
         KB-->>HL: Return step-by-step guide
         
         loop Each Step
             HL->>U: Display step instructions
             U->>P: Perform action in product
-            Note over HL,P: Lighthouse continuously observes<br/>Product UI/DOM
+            Note over HL,P: Lighthouse observes Product UI/DOM
             
             alt Checkpoint reached
-                alt via passive observation
-                    HL->>P: Check UI/DOM state
-                    P-->>HL: UI state matches checkpoint
-                    HL->>U: Show completion ✓
-                else via optional event integration
-                    P->>HL: Emit completion event
-                    HL->>U: Show completion ✓
-                end
-            else Checkpoint not yet reached
-                alt User requests hint
-                    U->>HL: Request hint
-                    HL->>KB: Query for hint
-                    KB-->>HL: Return hint
-                    HL->>U: Display hint
-                    Note over HL: Continue monitoring
-                else User tries to skip
-                    U->>HL: Request skip step
-                    HL->>KB: Check step dependencies
-                    KB-->>HL: Return skip feasibility
-                    HL->>P: Check current state
-                    P-->>HL: Return state info
-                    alt Skip allowed
-                        HL->>U: Skip to next step
-                    else Skip not feasible
-                        HL->>U: Must complete this step
-                        Note over HL: Continue monitoring
-                    end
-                else User continues trying
-                    Note over HL: Continue monitoring
+                HL->>P: Check UI/DOM state or receive event
+                P-->>HL: Checkpoint confirmed
+                HL->>U: Show completion ✓
+            else User skips step
+                U->>HL: Request skip step
+                HL->>KB: Check if skip allowed
+                KB-->>HL: Skip feasibility
+                alt Skip allowed
+                    HL->>U: Advance to next step
+                else Must complete
+                    HL->>U: Must complete this step
+                    Note over U,HL: Continue monitoring
                 end
             end
         end

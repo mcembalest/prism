@@ -7,11 +7,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { geminiService } from '@/services/gemini'
 import type { Point, BoundingBox, Message, WalkthroughStep, WalkthroughSession, PrebuiltGuideSession } from '@/types/walkthrough'
-import { getModeConfig, defaultMode } from '@/config/modes'
+import { getModeConfig, productMode } from '@/config/modes'
 
 export function Helper() {
-    // Mode is set in code only - change defaultMode in config/modes/index.ts
-    const modeConfig = getModeConfig(defaultMode)
+    // Mode is set in code only - change productMode in config/modes/index.ts
+    const modeConfig = getModeConfig(productMode)
     
     // Get guides and topics from current mode
     const PREBUILT_GUIDES = modeConfig.guides
