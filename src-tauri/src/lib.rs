@@ -628,9 +628,45 @@ pub fn run() {
           }
         });
 
-        // Build tray icon (no menu, just click to launch)
-        let _tray = TrayIconBuilder::new()
-          .icon(app.default_window_icon().unwrap().clone())
+        // ========== TRAY ICON INITIALIZATION WITH DIAGNOSTICS ==========
+        println!("[Lighthouse] ====== System Information ======");
+        println!("[Lighthouse] macOS version: {:?}", std::env::var("OSTYPE").unwrap_or_else(|_| "unknown".to_string()));
+        println!("[Lighthouse] Architecture: {}", std::env::consts::ARCH);
+        println!("[Lighthouse] OS: {}", std::env::consts::OS);
+        println!("[Lighthouse] ================================");
+
+        println!("[Lighthouse] Attempting to create system tray icon...");
+
+        // Try to get the default window icon with detailed logging
+        let icon_result = app.default_window_icon();
+        let icon = match icon_result {
+            Some(icon) => {
+                println!("[Lighthouse] ✓ Default window icon loaded successfully");
+                icon.clone()
+            }
+            None => {
+                eprintln!("[Lighthouse] ⚠ WARNING: Default window icon not available, attempting fallback...");
+
+                // Try loading icon from file as fallback
+                match tauri::image::Image::from_path("icons/icon.icns") {
+                    Ok(fallback_icon) => {
+                        println!("[Lighthouse] ✓ Fallback icon loaded from icons/icon.icns");
+                        fallback_icon
+                    }
+                    Err(e) => {
+                        eprintln!("[Lighthouse] ✗ ERROR: Failed to load fallback icon: {:?}", e);
+                        eprintln!("[Lighthouse] ✗ ERROR: Cannot create tray icon without an icon file");
+                        eprintln!("[Lighthouse] ✗ Please ensure icons/icon.icns exists in the bundle");
+                        return Err(format!("Failed to load tray icon: no icon available. Error: {:?}", e).into());
+                    }
+                }
+            }
+        };
+
+        // Build tray icon with error handling
+        println!("[Lighthouse] Building tray icon...");
+        let tray_result = TrayIconBuilder::new()
+          .icon(icon)
           .tooltip("Lighthouse")
           .on_tray_icon_event(|tray, event| {
             if let tauri::tray::TrayIconEvent::Click {
@@ -646,7 +682,20 @@ pub fn run() {
               });
             }
           })
-          .build(app)?;
+          .build(app);
+
+        match tray_result {
+            Ok(_tray) => {
+                println!("[Lighthouse] ✓ System tray icon created successfully!");
+                println!("[Lighthouse] ✓ App should be visible in menu bar");
+            }
+            Err(e) => {
+                eprintln!("[Lighthouse] ✗ ERROR: Failed to create tray icon: {:?}", e);
+                eprintln!("[Lighthouse] ✗ The app will be invisible without a tray icon!");
+                return Err(format!("Failed to build tray icon: {:?}", e).into());
+            }
+        }
+        println!("[Lighthouse] ========================================");
 
         // Load saved window state but don't auto-arrange
         let app_handle = app.handle().clone();
