@@ -5,7 +5,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_decorum::WebviewWindowExt;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState};
+use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState, TrayIcon};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 
 // Focused Window State Management
@@ -20,6 +20,7 @@ struct FocusedWindowInfo {
 struct AppState {
     focused_window: Mutex<Option<FocusedWindowInfo>>,
     selection_mode: Mutex<bool>,
+    tray_icon: Mutex<Option<TrayIcon>>,
 }
 
 impl AppState {
@@ -27,6 +28,7 @@ impl AppState {
         Self {
             focused_window: Mutex::new(None),
             selection_mode: Mutex::new(false),
+            tray_icon: Mutex::new(None),
         }
     }
 
@@ -660,6 +662,7 @@ pub fn run() {
         println!("[Lighthouse] Building tray icon...");
         let tray_result = TrayIconBuilder::new()
           .icon(icon)
+          .icon_as_template(true)
           .tooltip("Lighthouse")
           .on_tray_icon_event(|tray, event| {
             if let tauri::tray::TrayIconEvent::Click {
@@ -678,7 +681,10 @@ pub fn run() {
           .build(app);
 
         match tray_result {
-            Ok(_tray) => {
+            Ok(tray) => {
+                // Keep tray icon alive for the lifetime of the app
+                let state = app.state::<AppState>();
+                *state.tray_icon.lock().unwrap() = Some(tray);
                 println!("[Lighthouse] ✓ System tray icon created successfully!");
                 println!("[Lighthouse] ✓ App should be visible in menu bar");
             }
