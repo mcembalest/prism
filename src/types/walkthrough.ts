@@ -67,7 +67,6 @@ export type IntentType = 'query' | 'point' | 'detect' | 'walkthrough' | 'text-on
 // Pre-built guide types
 export interface PrebuiltStep {
   instruction: string
-  hint?: string
   caption?: string
   observation?: string
   points?: Point[]
@@ -91,5 +90,4 @@ export interface PrebuiltGuideSession {
   completedSteps: Set<number>
   skippedSteps: Set<number>
   isComplete: boolean
-  showHint: boolean
 }

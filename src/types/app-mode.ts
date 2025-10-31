@@ -2,7 +2,7 @@
 
 import type { PrebuiltGuide } from './walkthrough'
 
-export type AppModeId = 'github' | 'zoom' | 'figma'
+export type AppModeId = 'github' | 'zoom' | 'figma' | 'gcal'
 
 export interface Topic {
   id: string

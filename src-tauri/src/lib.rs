@@ -645,21 +645,14 @@ pub fn run() {
                 icon.clone()
             }
             None => {
-                eprintln!("[Lighthouse] ⚠ WARNING: Default window icon not available, attempting fallback...");
-
-                // Try loading icon from file as fallback
-                match tauri::image::Image::from_path("icons/icon.icns") {
-                    Ok(fallback_icon) => {
-                        println!("[Lighthouse] ✓ Fallback icon loaded from icons/icon.icns");
-                        fallback_icon
-                    }
-                    Err(e) => {
-                        eprintln!("[Lighthouse] ✗ ERROR: Failed to load fallback icon: {:?}", e);
-                        eprintln!("[Lighthouse] ✗ ERROR: Cannot create tray icon without an icon file");
-                        eprintln!("[Lighthouse] ✗ Please ensure icons/icon.icns exists in the bundle");
-                        return Err(format!("Failed to load tray icon: no icon available. Error: {:?}", e).into());
-                    }
-                }
+                eprintln!("[Lighthouse] ✗ ERROR: Default window icon not available");
+                eprintln!("[Lighthouse] ✗ ERROR: Cannot create tray icon without an icon");
+                eprintln!("[Lighthouse] ✗ This usually means:");
+                eprintln!("[Lighthouse]   - Icon files are missing from the bundle");
+                eprintln!("[Lighthouse]   - Icon files are corrupted");
+                eprintln!("[Lighthouse]   - The app bundle was not built correctly");
+                eprintln!("[Lighthouse] ✗ Please rebuild the app with: cargo build --release");
+                return Err("Failed to load tray icon: no default window icon available".into());
             }
         };
 

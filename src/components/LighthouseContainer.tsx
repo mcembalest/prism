@@ -39,7 +39,7 @@ export function LighthouseContainer() {
     }, [])
 
     return (
-        <Card className="h-screen w-full bg-zinc-900 backdrop-blur-xl border-0 shadow-2xl overflow-hidden flex flex-col rounded-2xl p-0">
+        <Card className="h-screen w-full max-w-full bg-zinc-900 backdrop-blur-xl border-0 shadow-2xl overflow-hidden overflow-x-hidden flex flex-col rounded-2xl p-0">
             {isSelectionMode && <SelectionBanner />}
             <DraggableHeader />
             <Helper />

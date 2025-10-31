@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { RadialProgress } from '@/components/ui/radial-progress'
 import { ChatInput } from '@/components/ChatInput'
-import { Check, ArrowLeft } from 'lucide-react'
+import { Check, ArrowLeft, Search, X } from 'lucide-react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { geminiService } from '@/services/gemini'
@@ -22,6 +22,9 @@ export function Helper() {
     const [currentView, setCurrentView] = useState<ViewType>('landing')
     const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
     const [prebuiltGuideSession, setPrebuiltGuideSession] = useState<PrebuiltGuideSession | null>(null)
+
+    // Search state
+    const [searchQuery, setSearchQuery] = useState('')
 
     // Track guide progress (session-based, not persisted)
     const [guideProgress, setGuideProgress] = useState<Map<string, { currentStep: number, totalSteps: number, hasSkipped: boolean, isComplete: boolean }>>(new Map())
@@ -160,7 +163,6 @@ export function Helper() {
             completedSteps: new Set(),
             skippedSteps: new Set(),
             isComplete: false,
-            showHint: false
         }
 
         setPrebuiltGuideSession(session)
@@ -216,7 +218,6 @@ export function Helper() {
                 ...prebuiltGuideSession,
                 currentStepIndex: nextStepIndex,
                 completedSteps: newCompletedSteps,
-                showHint: false
             }
 
             setPrebuiltGuideSession(updatedSession)
@@ -302,7 +303,6 @@ export function Helper() {
                 ...prebuiltGuideSession,
                 currentStepIndex: nextStepIndex,
                 skippedSteps: newSkippedSteps,
-                showHint: false
             }
 
             setPrebuiltGuideSession(updatedSession)
@@ -636,7 +636,7 @@ export function Helper() {
                 const guideName = prebuiltGuideSession?.guide.title || 'this guide'
                 const currentStep = prebuiltGuideSession ? prebuiltGuideSession.currentStepIndex + 1 : 1
                 mockResponse = `You're on step ${currentStep} of "${guideName}". ${query.toLowerCase().includes('help') || query.toLowerCase().includes('stuck')
-                    ? 'Try following the instruction above, or use the Hint button if you need more guidance. You can also skip this step if needed.'
+                    ? 'Try following the instruction above. You can also skip this step if needed.'
                     : 'What specific part would you like help with?'}`
             }
 
@@ -689,74 +689,68 @@ export function Helper() {
         }
     }
 
+    // Search logic function
+    const searchGuides = (query: string) => {
+        if (!query.trim()) return []
+
+        const lowerQuery = query.toLowerCase().trim()
+
+        // Search across all guides
+        const results = PREBUILT_GUIDES.map(guide => {
+            let score = 0
+            let matchedIn = ''
+
+            // Check title (highest priority)
+            if (guide.title.toLowerCase().includes(lowerQuery)) {
+                score += guide.title.toLowerCase() === lowerQuery ? 100 : 50
+                matchedIn = 'title'
+            }
+
+            // Check description
+            if (guide.description?.toLowerCase().includes(lowerQuery)) {
+                score += 30
+                if (!matchedIn) matchedIn = 'description'
+            }
+
+            // Check topic
+            if (guide.topic.toLowerCase().includes(lowerQuery)) {
+                score += 20
+                if (!matchedIn) matchedIn = 'topic'
+            }
+
+            // Check step instructions
+            const stepMatch = guide.steps.some(step =>
+                step.instruction.toLowerCase().includes(lowerQuery)
+            )
+            if (stepMatch) {
+                score += 10
+                if (!matchedIn) matchedIn = 'steps'
+            }
+
+            return { guide, score, matchedIn }
+        })
+
+        // Filter out non-matches and sort by score (highest first)
+        return results
+            .filter(r => r.score > 0)
+            .sort((a, b) => b.score - a.score)
+    }
+
+    const filteredGuides = searchGuides(searchQuery)
+
     // Render functions for different views
     const renderLandingView = () => (
         <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="p-6 border-b border-zinc-800/50">
+            <div className="p-6">
                 <h1 className="text-3xl font-bold text-white text-center mb-2">How can I help?</h1>
                 <p className="text-sm text-zinc-400 text-center">Ask a question or choose a guide</p>
             </div>
 
             <ScrollArea className="flex-1 h-0">
-                <div ref={scrollRef} className="p-6 space-y-6">
-                    {/* Chat messages */}
-                    {messages.length > 0 && (
-                        <div className="space-y-3 mb-6">
-                            {messages.map((message) => (
-                                <div
-                                    key={message.id}
-                                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                                >
-                                    <div
-                                        className={`max-w-[85%] rounded-2xl p-3.5 shadow-lg ${
-                                            message.role === 'user'
-                                                ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white'
-                                                : 'bg-zinc-800/80 text-gray-100 border border-zinc-700/50'
-                                        }`}
-                                    >
-                                        <p className="text-sm leading-relaxed">{message.content}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Recent Guides */}
+                <div ref={scrollRef} className="px-4 py-6 space-y-6 max-w-full overflow-x-hidden">
+                    {/* Topic Buttons */}
                     <div>
-                        <h2 className="text-sm font-semibold text-zinc-300 mb-3">Recent Guides</h2>
-                        <div className="grid grid-cols-2 gap-2">
-                            {PREBUILT_GUIDES.filter(g => g.isRecent).map(guide => {
-                                const progress = guideProgress.get(guide.id)
-                                const isInProgress = progress && !progress.isComplete
-                                const isCompleted = progress?.isComplete || guide.isCompleted
-
-                                return (
-                                    <button
-                                        key={guide.id}
-                                        onClick={() => startPrebuiltGuide(guide.id)}
-                                        className="flex items-center gap-2 p-2 rounded-full bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 transition-all text-left"
-                                    >
-                                        {isCompleted ? (
-                                            <Check className="h-4 w-4 text-green-400 flex-shrink-0" />
-                                        ) : isInProgress ? (
-                                            <RadialProgress
-                                                progress={progress.currentStep / progress.totalSteps}
-                                                hasSkipped={progress.hasSkipped}
-                                                size={16}
-                                            />
-                                        ) : (
-                                            <div className="h-4 w-4 rounded-full border-2 border-zinc-600 flex-shrink-0" />
-                                        )}
-                                        <span className="text-xs text-zinc-200">{guide.title}</span>
-                                    </button>
-                                )
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Recommended Topics */}
-                    <div>
-                        <h2 className="text-sm font-semibold text-zinc-300 mb-3">Recommended Topics</h2>
+                        <h2 className="text-sm font-semibold text-zinc-300 mb-3">Browse Topics</h2>
                         <div className="grid grid-cols-2 gap-2">
                             {TOPICS.map(topic => (
                                 <button
@@ -772,10 +766,107 @@ export function Helper() {
                                 </button>
                             ))}
                         </div>
-                        <button className="w-full mt-3 p-2 rounded-full border border-zinc-700/50 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all">
-                            Browse All Topics
-                        </button>
                     </div>
+
+                    {/* Search Bar */}
+                    <div>
+                        <h2 className="text-sm font-semibold text-zinc-300 mb-3">Search Guides</h2>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Escape') {
+                                        setSearchQuery('')
+                                    }
+                                }}
+                                placeholder="Search guides"
+                                className="w-full pl-10 pr-10 py-2 rounded-full bg-zinc-800/90 border border-zinc-700/50 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 transition-colors"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Search Results */}
+                    {searchQuery && (
+                        <div className="overflow-hidden w-full">
+                            <h2 className="text-sm font-semibold text-zinc-300 mb-3">
+                                {filteredGuides.length > 0
+                                    ? `Found ${filteredGuides.length} guide${filteredGuides.length === 1 ? '' : 's'}`
+                                    : 'No guides found'}
+                            </h2>
+                            {filteredGuides.length > 0 ? (
+                                <div className="space-y-1.5 overflow-hidden w-full">
+                                    {filteredGuides.map(({ guide, matchedIn }) => (
+                                        <button
+                                            key={guide.id}
+                                            onClick={() => {
+                                                setSearchQuery('')
+                                                startPrebuiltGuide(guide.id)
+                                            }}
+                                            className="w-full max-w-full flex items-start gap-2.5 p-2.5 rounded-lg bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 transition-all text-left group overflow-hidden min-w-0"
+                                        >
+                                            <div className="flex-1 min-w-0 max-w-full overflow-hidden">
+                                                <div className="mb-0.5 w-full overflow-hidden">
+                                                    <span className="text-xs font-medium text-zinc-200 group-hover:text-white transition-colors block truncate break-words">
+                                                        {guide.title}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 min-w-0 w-full overflow-hidden">
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-700/50 text-zinc-400 whitespace-nowrap flex-shrink-0">
+                                                        {guide.topic}
+                                                    </span>
+                                                    {guide.description && (
+                                                        <span
+                                                            className="text-[11px] text-zinc-500 break-words flex-1 min-w-0 max-w-full overflow-hidden"
+                                                            style={{ display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}
+                                                        >
+                                                            {guide.description}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-zinc-500 text-center py-4">
+                                    No guides match "{searchQuery}"
+                                </p>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Chat messages */}
+                    {messages.length > 0 && (
+                        <div className="space-y-2">
+                            {messages.map((message) => (
+                                <div
+                                    key={message.id}
+                                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                >
+                                    <div
+                                        className={`max-w-[80%] rounded-xl p-2 shadow-lg ${
+                                            message.role === 'user'
+                                                ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white'
+                                                : 'bg-zinc-800/80 text-gray-100 border border-zinc-700/50'
+                                        }`}
+                                    >
+                                        <p className="text-xs leading-relaxed">{message.content}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </ScrollArea>
 
@@ -850,7 +941,8 @@ export function Helper() {
                             onClick={async () => {
                                 setMessages([])
                                 setPrebuiltGuideSession(null)
-                                setCurrentView('landing')
+                                // If user came from a topic, go back to topic view; otherwise go to landing
+                                setCurrentView(selectedTopic ? 'topic' : 'landing')
                                 if (overlayWindowExistsRef.current) {
                                     await invoke('close_screen_overlay')
                                     overlayWindowExistsRef.current = false
@@ -921,9 +1013,9 @@ export function Helper() {
 
                 {/* Messages area */}
                 <ScrollArea className="flex-1 h-0">
-                    <div ref={scrollRef} className={isPrebuiltGuide ? "p-6 space-y-4" : "p-4 space-y-3"}>
+                    <div ref={scrollRef} className={isPrebuiltGuide ? "px-4 py-6 space-y-4 max-w-full" : "px-4 py-4 space-y-3 max-w-full"}>
                         {messages.length > 0 && (
-                            <div className={isPrebuiltGuide ? "space-y-3 mb-6" : "space-y-3"}>
+                            <div className={isPrebuiltGuide ? "space-y-2 mb-6" : "space-y-2"}>
                                 {messages.map((message, index) => {
                                     const isLastMessage = index === messages.length - 1
                                     return (
@@ -932,13 +1024,13 @@ export function Helper() {
                                                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                                             >
                                                 <div
-                                                    className={`max-w-[85%] rounded-2xl p-3.5 shadow-lg ${
+                                                    className={`max-w-[80%] rounded-xl p-2 shadow-lg ${
                                                         message.role === 'user'
                                                             ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white'
                                                             : 'bg-zinc-800/80 text-gray-100 border border-zinc-700/50'
                                                     }`}
                                                 >
-                                                    <p className="text-sm leading-relaxed">
+                                                    <p className="text-xs leading-relaxed">
                                                         {streamingMessageId === message.id
                                                             ? streamingObservation
                                                             : message.content}

@@ -88,7 +88,6 @@ const guides: PrebuiltGuide[] = [
         caption: 'Initialize Repository',
         instruction: 'Optionally check "Add a README file" to give your repository a home page document.',
         points: [{ x: 0.43, y: 0.58 }],
-        hint: 'Adding a README makes your repository easier to understand.'
       },
       {
         caption: 'Create Repo',
@@ -106,7 +105,6 @@ const guides: PrebuiltGuide[] = [
     steps: [
       {
         instruction: 'Welcome!',
-        hint: 'This is a sample onboarding guide'
       }
     ]
   }
