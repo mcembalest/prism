@@ -36,9 +36,6 @@ export function Helper() {
     const [statusMessage, setStatusMessage] = useState<string>('')
     const [walkthroughSession, setWalkthroughSession] = useState<WalkthroughSession | null>(null)
 
-    // Streaming observation states
-    const [streamingObservation, setStreamingObservation] = useState<string>('')
-    const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
 
     // Keyboard shortcut flash notification
     const [showShortcutFlash, setShowShortcutFlash] = useState(false)
@@ -47,7 +44,12 @@ export function Helper() {
     const scrollRef = useRef<HTMLDivElement>(null)
     const proceedHandlerRef = useRef<(() => Promise<void>) | null>(null)
     const isExecutingShortcut = useRef<boolean>(false)
-    const streamingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+    const observationTimeoutRefs = useRef<Map<string, NodeJS.Timeout>>(new Map())
+
+    const messageVariantStyles: Record<'assistant' | 'instruction', string> = {
+        assistant: 'bg-zinc-800/80 text-gray-100 border border-zinc-700/50',
+        instruction: 'bg-indigo-500/15 text-indigo-100 border border-indigo-400/40'
+    }
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -65,7 +67,7 @@ export function Helper() {
                 scrollRef.current.scrollTop = scrollRef.current.scrollHeight
             }
         }
-    }, [messages, streamingObservation])
+    }, [messages])
 
     // Listen for global keyboard shortcut to proceed to next step
     useEffect(() => {
@@ -118,15 +120,6 @@ export function Helper() {
         }
     }, [])
 
-    // Cleanup streaming interval on unmount or view change
-    useEffect(() => {
-        return () => {
-            if (streamingIntervalRef.current) {
-                clearInterval(streamingIntervalRef.current)
-                streamingIntervalRef.current = null
-            }
-        }
-    }, [])
 
     const openScreenOverlay = async (
         points: Point[] = [],
@@ -178,12 +171,12 @@ export function Helper() {
 
         // Add first step as an assistant message
         const firstStep = guide.steps[0]
-        const stepMessage = createAssistantMessage(firstStep.instruction)
+        const stepMessage = createAssistantMessage(firstStep.instruction, { variant: 'instruction' })
         setMessages([stepMessage])
-
-        // Trigger observation streaming if this step has one
+        
+        // Add observation with delay if present
         if (firstStep.observation) {
-            streamObservation(firstStep.observation)
+            addObservationWithDelay(firstStep.observation)
         }
 
         // Show overlay for first step
@@ -231,12 +224,12 @@ export function Helper() {
             }))
 
             // Add next step as an assistant message
-            const stepMessage = createAssistantMessage(nextStep.instruction)
+            const stepMessage = createAssistantMessage(nextStep.instruction, { variant: 'instruction' })
             setMessages(prev => [...prev, stepMessage])
-
-            // Trigger observation streaming if this step has one
+            
+            // Add observation with delay if present
             if (nextStep.observation) {
-                streamObservation(nextStep.observation)
+                addObservationWithDelay(nextStep.observation)
             }
 
             // Update overlay with next step
@@ -316,12 +309,12 @@ export function Helper() {
             }))
 
             // Add next step as an assistant message
-            const stepMessage = createAssistantMessage(nextStep.instruction)
+            const stepMessage = createAssistantMessage(nextStep.instruction, { variant: 'instruction' })
             setMessages(prev => [...prev, stepMessage])
-
-            // Trigger observation streaming if this step has one
+            
+            // Add observation with delay if present
             if (nextStep.observation) {
-                streamObservation(nextStep.observation)
+                addObservationWithDelay(nextStep.observation)
             }
 
             // Update overlay
@@ -404,15 +397,16 @@ export function Helper() {
             setWalkthroughSession(updatedSession)
             await updateOverlayWithSession(updatedSession)
 
-            const assistantMessage: Message = {
-                id: Date.now().toString(),
-                role: 'assistant',
-                content: `Step ${newStep.stepNumber}: ${newStep.instruction}`,
-                image: screenshotDataUrl,
-                points: newStep.points,
-                boxes: newStep.boxes,
-                caption: newStep.caption
-            }
+            const assistantMessage = createAssistantMessage(
+                `Step ${newStep.stepNumber}: ${newStep.instruction}`,
+                {
+                    image: screenshotDataUrl,
+                    points: newStep.points,
+                    boxes: newStep.boxes,
+                    caption: newStep.caption,
+                    variant: 'instruction'
+                }
+            )
             setMessages(prev => [...prev, assistantMessage])
             console.log('[Proceed Handler] Successfully completed step', newStep.stepNumber)
         } catch (error) {
@@ -478,22 +472,17 @@ export function Helper() {
     }
 
     // Helper to create assistant message
-    const createAssistantMessage = (
-        content: string,
-        image?: string,
-        points?: Point[],
-        boxes?: BoundingBox[],
-        caption?: string,
-        observation?: string
-    ): Message => ({
+    type AssistantMessageOptions = Partial<Omit<Message, 'id' | 'role' | 'content'>>
+
+    const createAssistantMessage = (content: string, options: AssistantMessageOptions = {}): Message => ({
         id: Date.now().toString(),
         role: 'assistant',
         content,
-        image,
-        points,
-        boxes,
-        caption,
-        observation
+        image: options.image,
+        points: options.points,
+        boxes: options.boxes,
+        caption: options.caption,
+        variant: options.variant ?? 'assistant'
     })
 
     // Helper to take screenshot with fade animation
@@ -502,41 +491,46 @@ export function Helper() {
         return await invoke<string>('take_screenshot')
     }
 
-    // Helper to add observation as separate message with streaming effect
-    const streamObservation = (observation: string) => {
-        // Clear any existing streaming interval
-        if (streamingIntervalRef.current) {
-            clearInterval(streamingIntervalRef.current)
-            streamingIntervalRef.current = null
-        }
+    // Helper to add observation with delayed display and ellipsis indicator
+    const addObservationWithDelay = (observation: string) => {
+        // Clear any existing timeout for observations
+        observationTimeoutRefs.current.forEach((timeout) => clearTimeout(timeout))
+        observationTimeoutRefs.current.clear()
 
-        // Wait 2.5 seconds before showing observation (longer, more natural delay)
-        setTimeout(() => {
-            // Create and add observation message
-            const observationMessage = createAssistantMessage(observation)
-            setMessages(prev => [...prev, observationMessage])
+        const ellipsisId = `ellipsis-${Date.now()}`
+        
+        // Show ellipsis after 1 second
+        const ellipsisTimeout = setTimeout(() => {
+            const ellipsisMessage: Message = {
+                id: ellipsisId,
+                role: 'assistant',
+                content: '...',
+                variant: 'assistant'
+            }
+            setMessages(prev => [...prev, ellipsisMessage])
+        }, 1000)
+        observationTimeoutRefs.current.set('ellipsis', ellipsisTimeout)
 
-            // Reset streaming state and start streaming this message
-            setStreamingObservation('')
-            setStreamingMessageId(observationMessage.id)
-
-            // Stream the content character by character
-            let charIndex = 0
-            const streamInterval = setInterval(() => {
-                if (charIndex < observation.length) {
-                    setStreamingObservation(observation.slice(0, charIndex + 1))
-                    charIndex++
-                } else {
-                    // Streaming complete
-                    clearInterval(streamInterval)
-                    streamingIntervalRef.current = null
-                    setStreamingMessageId(null)
-                }
-            }, 10)
-
-            streamingIntervalRef.current = streamInterval
-        }, 2500) // 2.5 second delay before observation appears
+        // Replace ellipsis with actual observation after 2.5 seconds total
+        const observationTimeout = setTimeout(() => {
+            setMessages(prev => {
+                // Remove ellipsis message and add observation
+                const filtered = prev.filter(msg => msg.id !== ellipsisId)
+                return [...filtered, createAssistantMessage(observation, { variant: 'assistant' })]
+            })
+            observationTimeoutRefs.current.clear()
+        }, 2500)
+        observationTimeoutRefs.current.set('observation', observationTimeout)
     }
+
+    // Cleanup observation timeouts on unmount
+    useEffect(() => {
+        return () => {
+            observationTimeoutRefs.current.forEach((timeout) => clearTimeout(timeout))
+            observationTimeoutRefs.current.clear()
+        }
+    }, [])
+
 
     // Intent Handlers
     const handleTextOnlyIntent = async (query: string) => {
@@ -552,8 +546,10 @@ export function Helper() {
 
         setMessages(prev => [...prev, createAssistantMessage(
             `Found ${result.points.length} instance(s) of "${query}"`,
-            screenshot,
-            result.points
+            {
+                image: screenshot,
+                points: result.points
+            }
         )])
 
         await openScreenOverlay(result.points, [], result.points.length, result.points.length)
@@ -564,7 +560,7 @@ export function Helper() {
         setStatusMessage('Answering...')
         const result = await geminiService.query(screenshot, query)
 
-        setMessages(prev => [...prev, createAssistantMessage(result.answer, screenshot)])
+        setMessages(prev => [...prev, createAssistantMessage(result.answer, { image: screenshot })])
     }
 
     const handleWalkthroughIntent = async (query: string) => {
@@ -593,10 +589,13 @@ export function Helper() {
         setWalkthroughSession(newSession)
         setMessages(prev => [...prev, createAssistantMessage(
             `Step 1: ${firstStep.instruction}`,
-            screenshot,
-            firstStep.points,
-            firstStep.boxes,
-            firstStep.caption
+            {
+                image: screenshot,
+                points: firstStep.points,
+                boxes: firstStep.boxes,
+                caption: firstStep.caption,
+                variant: 'instruction'
+            }
         )])
 
         await openScreenOverlay(
@@ -1018,26 +1017,23 @@ export function Helper() {
                             <div className={isPrebuiltGuide ? "space-y-2 mb-6" : "space-y-2"}>
                                 {messages.map((message, index) => {
                                     const isLastMessage = index === messages.length - 1
+                                    const isUser = message.role === 'user'
+                                    const variant = (message.variant ?? 'assistant') as NonNullable<Message['variant']>
+                                    const isInstruction = !isUser && variant === 'instruction'
+                                    const bubbleClasses = isUser
+                                        ? 'p-2 bg-gradient-to-br from-blue-600 to-blue-700 text-white'
+                                        : `p-3 ${messageVariantStyles[variant]}`
+                                    const textClasses = 'text-xs leading-relaxed'
                                     return (
                                         <div key={message.id}>
-                                            <div
-                                                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                                            >
-                                                <div
-                                                    className={`max-w-[80%] rounded-xl p-2 shadow-lg ${
-                                                        message.role === 'user'
-                                                            ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white'
-                                                            : 'bg-zinc-800/80 text-gray-100 border border-zinc-700/50'
-                                                    }`}
-                                                >
-                                                    <p className="text-xs leading-relaxed">
-                                                        {streamingMessageId === message.id
-                                                            ? streamingObservation
-                                                            : message.content}
-                                                        {streamingMessageId === message.id && (
-                                                            <span className="animate-pulse ml-0.5">▊</span>
-                                                        )}
-                                                    </p>
+                                            <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`max-w-[90%] rounded-xl ${bubbleClasses}`}>
+                                                    {isInstruction && (
+                                                        <span className="block text-[7px] font-semibold uppercase tracking-wide mb-1 text-indigo-500">
+                                                            Instruction
+                                                        </span>
+                                                    )}
+                                                    <p className={textClasses}>{message.content}</p>
                                                 </div>
                                             </div>
 

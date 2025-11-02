@@ -59,7 +59,7 @@ export interface Message {
   points?: Point[]
   boxes?: BoundingBox[]
   caption?: string
-  observation?: string
+  variant?: 'assistant' | 'instruction'
 }
 
 export type IntentType = 'query' | 'point' | 'detect' | 'walkthrough' | 'text-only'
