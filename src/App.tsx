@@ -1,9 +1,9 @@
-import { LighthouseContainer } from './components/LighthouseContainer'
+import { SnowKiteContainer } from './components/SnowKiteContainer'
 
 function App() {
   return (
     <div className="h-screen w-full max-w-full bg-transparent dark overflow-x-hidden">
-      <LighthouseContainer />
+      <SnowKiteContainer />
     </div>
   )
 }

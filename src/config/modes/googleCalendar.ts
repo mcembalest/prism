@@ -1,9 +1,10 @@
 // Google Calendar mode configuration
 import type { AppModeConfig } from '@/types/app-mode'
-import type { PrebuiltGuide } from '@/types/walkthrough'
+import type { GuideDefinition } from '@/types/guide'
 
-const guides: PrebuiltGuide[] = [
+const guides: GuideDefinition[] = [
   {
+    source: 'static',
     id: 'view-shared-calendar',
     title: 'View someone else\'s shared calendar',
     topic: 'Sharing',
@@ -28,12 +29,12 @@ const guides: PrebuiltGuide[] = [
       {
         caption: 'View options',
         instruction: 'Hover over the calendar name and click the three-dot menu for more options',
-        points: [{ x: 0.18, y: 0.65 }],
-        observation: 'You can change the calendar color, hide it, or adjust notification settings.'
+        points: [{ x: 0.18, y: 0.65 }]
       }
     ]
   },
   {
+    source: 'static',
     id: 'create-event',
     title: 'Create a new calendar event',
     topic: 'Calendar Basics',
@@ -78,6 +79,7 @@ const guides: PrebuiltGuide[] = [
     ]
   },
   {
+    source: 'static',
     id: 'share-calendar',
     title: 'Share your calendar',
     topic: 'Sharing',
@@ -112,8 +114,7 @@ const guides: PrebuiltGuide[] = [
       {
         caption: 'Set permissions',
         instruction: 'Choose the permission level (See all event details, Make changes, etc.)',
-        points: [{ x: 0.5, y: 0.62 }],
-        observation: 'Different permission levels control what the person can see and do with your calendar.'
+        points: [{ x: 0.5, y: 0.62 }]
       },
       {
         caption: 'Send invite',
@@ -123,6 +124,7 @@ const guides: PrebuiltGuide[] = [
     ]
   },
   {
+    source: 'static',
     id: 'recurring-event',
     title: 'Create a recurring event',
     topic: 'Calendar Basics',
@@ -152,8 +154,7 @@ const guides: PrebuiltGuide[] = [
       {
         caption: 'Custom recurrence',
         instruction: 'For custom patterns, select "Custom..." at the bottom of the menu',
-        points: [{ x: 0.4, y: 0.7 }],
-        observation: 'Custom recurrence lets you specify exact days, frequency, and end dates.'
+        points: [{ x: 0.4, y: 0.7 }]
       },
       {
         caption: 'Save event',
@@ -163,6 +164,7 @@ const guides: PrebuiltGuide[] = [
     ]
   },
   {
+    source: 'static',
     id: 'add-google-meet',
     title: 'Add Google Meet to an event',
     topic: 'Video Conferencing',
@@ -182,7 +184,6 @@ const guides: PrebuiltGuide[] = [
       {
         caption: 'Meet link added',
         instruction: 'A Google Meet link is automatically generated and added to the event',
-        observation: 'Guests will receive the Meet link in their invitation.',
         points: [{ x: 0.5, y: 0.52 }]
       },
       {
@@ -193,6 +194,7 @@ const guides: PrebuiltGuide[] = [
     ]
   },
   {
+    source: 'static',
     id: 'change-calendar-view',
     title: 'Change calendar view',
     topic: 'Calendar Basics',

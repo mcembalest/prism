@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 
-const STORAGE_KEY = 'Lighthouse_gemini_api_key'
+const STORAGE_KEY = 'SnowKite_gemini_api_key'
 
 export function Settings() {
   const [apiKey, setApiKey] = useState('')
@@ -51,7 +51,7 @@ export function Settings() {
             getCurrentWindow().startDragging().catch(() => {})
           }}
         >
-          <span className="text-xs font-semibold text-white/90">Lighthouse Settings</span>
+          <span className="text-xs font-semibold text-white/90">SnowKite Settings</span>
           <div className="flex items-center gap-1" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties} data-no-drag>
             <Button
               variant="ghost"
@@ -65,7 +65,7 @@ export function Settings() {
         </div>
         <div className="p-6">
           <div className="mb-4">
-            <p className="text-sm text-zinc-400">Configure API keys used by Lighthouse.</p>
+            <p className="text-sm text-zinc-400">Configure API keys used by SnowKite.</p>
           </div>
 
           <div className="space-y-2 mb-6">

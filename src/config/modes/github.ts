@@ -1,10 +1,11 @@
 // GitHub mode configuration
 import type { AppModeConfig } from '@/types/app-mode'
-import type { PrebuiltGuide } from '@/types/walkthrough'
+import type { GuideDefinition } from '@/types/guide'
 
-const guides: PrebuiltGuide[] = [
+const guides: GuideDefinition[] = [
   {
     id: 'review-pr',
+    source: 'static',
     title: 'Review a pull request',
     topic: 'GitHub Basics',
     description: 'Learn how to review code changes in a pull request on GitHub',
@@ -13,66 +14,62 @@ const guides: PrebuiltGuide[] = [
       {
         caption: 'Open PR tab',
         instruction: 'Navigate to the Pull Requests (PR) tab',
-        points: [{ x: 0.20, y: 0.20 }]
+        points: [{ x: 0.20, y: 0.20 }],
       },
       {
         caption: 'Pick a PR',
         instruction: 'Click on the PR you want to review.',
-        observation: 'Looks like you have two open PRs here.',
         points: [{ x: 0.25, y: 0.5 }]
       },
       {
         caption: 'Open Files tab',
         instruction: 'Click the Files changed tab',
-        points: [{ x: 0.42, y: 0.35 }]
+        points: [{ x: 0.42, y: 0.35 }],
       },
       {
         caption: 'Read code',
         instruction: 'At this point in a PR review, you read the code diffs (changes in the code).',
-        observation: 'Looks like this is a simple change to the README file.',
         points: [{ x: 0.35, y: 0.6 }]
       },
       {
         caption: 'Review changes',
         instruction: 'Click the Review changes button',
-        points: [{ x: 0.88, y: 0.39 }]
+        points: [{ x: 0.88, y: 0.39 }],
       },
       {
         caption: 'Add comment',
         instruction: 'Add your review comment and choose review type',
-        points: [{ x: 0.88, y: 0.55 }]
+        points: [{ x: 0.88, y: 0.55 }],
       },
       {
         caption: 'Submit',
         instruction: 'Click Submit review',
-        points: [{ x: 0.89, y: 0.83 }]
+        points: [{ x: 0.89, y: 0.83 }],
       }
     ]
   },
   {
     id: 'github-ui-tutorial',
+    source: 'static',
     title: 'Create a repository using the GitHub UI',
     topic: 'GitHub Basics',
-    description: 'Learn how to create a new repository step-by-step using GitHub’s website.',
+    description: "Learn how to create a new repository step-by-step using GitHub's website.",
     isRecent: true,
-    isCompleted: false,
     steps: [
-      
       {
         caption: 'Open menu',
         instruction: 'Click the "+" icon in the top right of GitHub.',
-        points: [{ x: 0.96, y: 0.08 }]
+        points: [{ x: 0.96, y: 0.08 }],
       },
       {
         caption: 'Select "New repository"',
         instruction: 'From the dropdown menu, select "New repository".',
-        points: [{ x: 0.93, y: 0.13 }]
+        points: [{ x: 0.93, y: 0.13 }],
       },
       {
         caption: 'Name Repository',
         instruction: 'Enter a unique Repository name.',
         points: [{ x: 0.4, y: 0.30 }],
-        observation: 'Repository names must be unique to your account.'
       },
       {
         caption: 'Add Description',
@@ -92,16 +89,16 @@ const guides: PrebuiltGuide[] = [
       {
         caption: 'Create Repo',
         instruction: 'Click the "Create repository" button to finish.',
-        points: [{ x: 0.45, y: 0.72 }]
+        points: [{ x: 0.45, y: 0.72 }],
       }
     ]
   },
   {
     id: 'onboarding',
+    source: 'static',
     title: 'Onboarding',
     topic: 'Getting Started',
     isRecent: true,
-    isCompleted: true,
     steps: [
       {
         instruction: 'Welcome!',

@@ -38,7 +38,7 @@ function dataUrlToInlineData(dataUrl: string): { mimeType: string; data: string 
 
 function getGeminiApiKey(): string {
   try {
-    return localStorage.getItem('Lighthouse_gemini_api_key') || ''
+    return localStorage.getItem('SnowKite_gemini_api_key') || ''
   } catch {
     return ''
   }
@@ -338,7 +338,6 @@ class GeminiService {
         caption: 'Error',
         instruction: 'Unable to determine the next step.',
         points: [],
-        boxes: [],
         isComplete: false
       }
     }
@@ -379,7 +378,6 @@ class GeminiService {
       caption: parsed.caption || 'Step',
       instruction: parsed.instruction,
       points,
-      boxes,
       isComplete: parsed.isComplete ?? false
     }
   }

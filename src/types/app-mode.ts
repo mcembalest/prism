@@ -1,8 +1,8 @@
-// App mode type definitions for generalizing Lighthouse to support different software products
+// App mode type definitions for generalizing SnowKite to support different software products
 
-import type { PrebuiltGuide } from './walkthrough'
+import type { GuideDefinition } from './guide'
 
-export type AppModeId = 'github' | 'zoom' | 'figma' | 'gcal'
+export type AppModeId = 'github' | 'zoom' | 'figma' | 'gcal' | 'rocketalumni'
 
 export interface Topic {
   id: string
@@ -16,7 +16,7 @@ export interface AppModeConfig {
   name: string
   description: string
   icon?: string
-  guides: PrebuiltGuide[]
+  guides: GuideDefinition[]
   topics: Topic[]
   welcomeMessage?: string
   aiContextPrompt?: string // Optional context to add to AI prompts for this mode

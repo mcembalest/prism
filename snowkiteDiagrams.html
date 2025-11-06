@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lighthouse</title>
+    <title>SnowKite</title>
     <script type="module">
         import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
         
@@ -240,22 +240,22 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Lighthouse</h1>
-            <h2>In-product customer guidance</h2>
+            <h1>SnowKite</h1>
+            <h2>The expert agent in your product</h2>
         </div>
         
         <!-- Top Diagram: Positioning -->
         <div class="top-diagram">
             <div class="diagram-card">
                 <div class="diagram-header">
-                    <h2>Where Lighthouse sits relative to your product</h2>
+                    <h2>Where SnowKite sits relative to your product</h2>
                 </div>
                 <div class="diagram-content">
                     <div class="mermaid">
 flowchart LR
     User[User]
     Prod[Product]
-    HL[Lighthouse]
+    HL[SnowKite]
     KB[(Product<br/>Knowledge)]
     
     User -->|uses| Prod
@@ -281,7 +281,7 @@ flowchart LR
                 <div class="diagram-content">
                     <div class="mermaid">
 flowchart TD
-    Start([User requests help]) --> Open[Lighthouse opens]
+    Start([User requests help]) --> Open[SnowKite opens]
     
     Open --> Choice{User action}
     Choice -->|Asks a question| Question[Answer contextually]
@@ -313,20 +313,20 @@ flowchart TD
             <!-- Sequence Diagram -->
             <div class="diagram-card">
                 <div class="diagram-header">
-                    <h2>Sequence of Lighthouse system interactions</h2>
+                    <h2>Sequence of SnowKite system interactions</h2>
                 </div>
                 <div class="diagram-content">
                     <div class="mermaid">
 sequenceDiagram
     actor U as User
     participant P as Product
-    participant HL as Lighthouse
-    participant KB as Product Knowledge
+    participant HL as SnowKite
+    participant KB as Knowledge Base
 
     U->>P: Working in product
     U->>HL: Request help
-    Note over HL,P: Lighthouse observes current context
-    HL->>U: Lighthouse opens
+    Note over HL,P: SnowKite observes current context
+    HL->>U: SnowKite opens
     
     alt User asks question
         U->>HL: Type question
@@ -347,7 +347,7 @@ sequenceDiagram
         loop Each Step
             HL->>U: Display step instructions
             U->>P: Perform action in product
-            Note over HL,P: Lighthouse observes Product UI/DOM
+            Note over HL,P: SnowKite observes Product UI/DOM
             
             alt Checkpoint reached
                 HL->>P: Check UI/DOM state or receive event

@@ -1,10 +1,11 @@
 // Zoom mode configuration
 import type { AppModeConfig } from '@/types/app-mode'
-import type { PrebuiltGuide } from '@/types/walkthrough'
+import type { GuideDefinition } from '@/types/guide'
 
-const guides: PrebuiltGuide[] = [
+const guides: GuideDefinition[] = [
   {
     id: 'join-meeting',
+    source: 'static',
     title: 'Join a Zoom meeting',
     topic: 'Getting Started',
     description: 'Learn how to join a Zoom video conference',
@@ -29,6 +30,7 @@ const guides: PrebuiltGuide[] = [
   },
   {
     id: 'start-meeting',
+    source: 'static',
     title: 'Start a new meeting',
     topic: 'Hosting',
     description: 'Learn how to start your own Zoom meeting',
@@ -43,13 +45,13 @@ const guides: PrebuiltGuide[] = [
         points: [{ x: 0.5, y: 0.45 }]
       },
       {
-        instruction: 'Your meeting will start immediately',
-        observation: 'You can now invite others or share your screen.'
+        instruction: 'Your meeting will start immediately'
       }
     ]
   },
   {
     id: 'share-screen',
+    source: 'static',
     title: 'Share screen',
     topic: 'Hosting',
     steps: [
@@ -69,6 +71,7 @@ const guides: PrebuiltGuide[] = [
   },
   {
     id: 'guest-share-screen',
+    source: 'static',
     title: 'Guest share screen',
     topic: 'Hosting',
     description: 'Learn how to let a guest share their screen in a Zoom meeting',

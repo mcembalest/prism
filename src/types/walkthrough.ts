@@ -29,7 +29,6 @@ export interface WalkthroughStepResult {
   caption: string
   instruction: string
   points: Point[]
-  boxes: BoundingBox[]
   isComplete: boolean
   request_id?: string
 }
@@ -40,7 +39,6 @@ export interface WalkthroughStep {
   caption: string
   instruction: string
   points: Point[]
-  boxes: BoundingBox[]
 }
 
 export interface WalkthroughSession {
@@ -57,7 +55,6 @@ export interface Message {
   content: string
   image?: string
   points?: Point[]
-  boxes?: BoundingBox[]
   caption?: string
   variant?: 'assistant' | 'instruction'
 }
@@ -68,9 +65,7 @@ export type IntentType = 'query' | 'point' | 'detect' | 'walkthrough' | 'text-on
 export interface PrebuiltStep {
   instruction: string
   caption?: string
-  observation?: string
   points?: Point[]
-  boxes?: BoundingBox[]
 }
 
 export interface PrebuiltGuide {

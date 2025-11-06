@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { listen } from '@tauri-apps/api/event'
 import type { Point } from '@/types/walkthrough'
+import type { CaptionPosition } from '@/types/guide'
 
 interface OverlayData {
     points: Point[]
@@ -9,43 +10,65 @@ interface OverlayData {
     currentStep?: number
     instruction?: string
     caption?: string
+    captionPosition?: CaptionPosition
     isComplete?: boolean
 }
 
-// Reusable component for rendering overlay points
-function OverlayPoint({ point, index, isPrevious, caption }: { point: Point; index: number; isPrevious?: boolean; caption?: string }) {
-    const baseClasses = "absolute shadow-2xl"
-    const sizeClasses = isPrevious ? "w-6 h-8" : "w-8 h-10"
-    const opacityClass = isPrevious ? "opacity-30" : "opacity-100 transition-all duration-500"
+/**
+ * Get Tailwind CSS classes for caption positioning based on the specified direction
+ * @param position - The desired position of the caption relative to the cursor
+ * @returns CSS classes for positioning the caption
+ */
+function getCaptionPositionClasses(position: CaptionPosition = 'down-right'): string {
+    const baseClasses = 'absolute bg-red-500 text-white text-sm px-3 py-1 rounded whitespace-nowrap font-medium'
 
+    // All positions relative to cursor tip at top-left (0, 0) of the container
+    const positionClasses: Record<CaptionPosition, string> = {
+        'up': 'bottom-full mb-4 left-0',
+        'up-right': 'bottom-full mb-4 left-6',
+        'right': 'top-0 left-full ml-6',
+        'down-right': 'top-6 left-6',
+        'down': 'top-full mt-4 left-0',
+        'down-left': 'top-6 right-full mr-6',
+        'left': 'top-0 right-full mr-6',
+        'up-left': 'bottom-full mb-4 right-6',
+    }
+
+    return `${baseClasses} ${positionClasses[position]}`
+}
+
+// Reusable component for rendering overlay points
+function OverlayPoint({
+    point,
+    index,
+    caption,
+    captionPosition = 'down-right'
+}: {
+    point: Point
+    index: number
+    caption?: string
+    captionPosition?: CaptionPosition
+}) {
     return (
         <div
-            key={`${isPrevious ? 'prev-' : ''}point-${index}`}
-            className={`${baseClasses} ${sizeClasses} ${opacityClass}`}
+            key={`point-${index}`}
+            className="absolute w-20 h-20 opacity-100 transition-all duration-500"
             style={{
                 left: `${point.x * 100}%`,
                 top: `${point.y * 100}%`,
-                zIndex: isPrevious ? 8900 : 9000,
+                zIndex: 9000,
             }}
         >
-            {/* 2x smaller, much narrower and slightly shorter Cursor SVG Icon */}
-            <svg
-                viewBox="0 0 8 14"
-                fill="none"
-                className="w-full h-full drop-shadow-lg"
-                style={{ filter: 'drop-shadow(0 0 2px rgba(239, 68, 68, 0.4))', width: '50%', height: '50%' }}
-            >
-                <path
-                    d="M2 1.0V11.5L4.2 8.0L5.8 12.2L7.2 11.7L5 7.5L8 6.7L2 1Z"
-                    fill="#EF4444"
-                    stroke="white"
-                    strokeWidth="0.7"
-                    strokeLinejoin="round"
-                />
-            </svg>
+            {/* Polygon cursor icon */}
+            <img
+                src="/polygon-cursor.png"
+                alt="Cursor"
+                className="absolute top-0 left-0"
+                style={{ width: '30%', height: '30%' }}
+            />
 
-            {!isPrevious && caption && (
-                <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-sm px-3 py-1 rounded shadow-lg whitespace-nowrap font-medium">
+            {caption && (
+                <div className={getCaptionPositionClasses(captionPosition)}>
                     {caption}
                 </div>
             )}
@@ -101,15 +124,29 @@ export function ScreenOverlay() {
     const isWalkthrough = data.walkthroughSteps && data.walkthroughSteps > 1
 
     return (
-        <div className="fixed inset-0 pointer-events-none">
+        <div 
+            className="fixed inset-0 pointer-events-none"
+            style={{
+                backgroundColor: 'transparent',
+                willChange: 'transform',
+                backfaceVisibility: 'hidden',
+                transform: 'translateZ(0)',
+            }}
+        >
             {/* Render current step */}
             {data.points.map((point, idx) => (
-                <OverlayPoint key={`point-${idx}`} point={point} index={idx} caption={data.caption} />
+                <OverlayPoint
+                    key={`point-${idx}`}
+                    point={point}
+                    index={idx}
+                    caption={data.caption}
+                    captionPosition={data.captionPosition ?? 'down-right'}
+                />
             ))}
 
             {/* Step counter and instruction for walkthroughs */}
             {isWalkthrough && (
-                <div className={`fixed top-8 left-8 bg-black/80 backdrop-blur text-white px-6 py-4 rounded-lg shadow-2xl pointer-events-auto border-2 max-w-md transition-all duration-500 ${
+                <div className={`fixed top-8 left-8 bg-black/80 backdrop-blur text-white px-6 py-4 rounded-lg pointer-events-auto border-2 max-w-md transition-all duration-500 ${
                     data.isComplete ? 'border-green-500/70 bg-green-900/40' : 'border-purple-500/50'
                 }`}>
                     <div className="flex items-center justify-between mb-2">
@@ -138,12 +175,6 @@ export function ScreenOverlay() {
                 </div>
             )}
 
-            {/* ESC hint (non-walkthrough) */}
-            {!isWalkthrough && (
-                <div className="fixed bottom-8 left-8 bg-black/70 backdrop-blur text-white px-4 py-2 rounded text-xs text-gray-400 pointer-events-auto border border-gray-600/50">
-                    Press ESC to close
-                </div>
-            )}
         </div>
     )
 }

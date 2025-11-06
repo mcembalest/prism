@@ -87,13 +87,14 @@ async fn wait_for_window_ready(window: &WebviewWindow, event_name: &str) {
 #[derive(Clone, Serialize)]
 struct OverlayPayload {
     points: Vec<Point>,
-    boxes: Vec<BoundingBox>,
     #[serde(rename = "walkthroughSteps")]
     walkthrough_steps: Option<u32>,
     #[serde(rename = "currentStep")]
     current_step: Option<u32>,
     instruction: Option<String>,
     caption: Option<String>,
+    #[serde(rename = "captionPosition")]
+    caption_position: Option<String>,
     #[serde(rename = "isComplete")]
     is_complete: Option<bool>,
 }
@@ -165,7 +166,7 @@ async fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
         "settings",
         WebviewUrl::App("settings.html".into())
     )
-    .title("Lighthouse Settings")
+    .title("SnowKite Settings")
     .inner_size(560.0, 420.0)
     .resizable(true)
     .decorations(false)
@@ -183,11 +184,11 @@ async fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
 async fn open_screen_overlay(
     app: tauri::AppHandle,
     points: Vec<Point>,
-    boxes: Vec<BoundingBox>,
     walkthrough_steps: Option<u32>,
     current_step: Option<u32>,
     instruction: Option<String>,
     caption: Option<String>,
+    caption_position: Option<String>,
     is_complete: Option<bool>,
 ) -> Result<(), String> {
 
@@ -218,6 +219,7 @@ async fn open_screen_overlay(
     .decorations(false)
     .transparent(true)
     .always_on_top(true)
+    .visible(false) // Start hidden to prevent flash
     .build()
     .map_err(|e| e.to_string())?;
 
@@ -232,19 +234,21 @@ async fn open_screen_overlay(
 
     let payload = OverlayPayload {
         points,
-        boxes,
         walkthrough_steps,
         current_step,
         instruction,
         caption,
+        caption_position,
         is_complete,
     };
 
-    // Wait for window to be ready, then send data
+    // Wait for window to be ready, then send data and show
     let window_clone = window.clone();
     tokio::spawn(async move {
         wait_for_window_ready(&window_clone, "overlay-ready").await;
         let _ = window_clone.emit("overlay-data", payload);
+        // Show window after data is loaded to prevent flash/artifacts
+        let _ = window_clone.show();
     });
 
     Ok(())
@@ -254,21 +258,21 @@ async fn open_screen_overlay(
 async fn update_screen_overlay_data(
     app: tauri::AppHandle,
     points: Vec<Point>,
-    boxes: Vec<BoundingBox>,
     walkthrough_steps: Option<u32>,
     current_step: Option<u32>,
     instruction: Option<String>,
     caption: Option<String>,
+    caption_position: Option<String>,
     is_complete: Option<bool>,
 ) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("screen-overlay") {
         let payload = OverlayPayload {
             points,
-            boxes,
             walkthrough_steps,
             current_step,
             instruction,
             caption,
+            caption_position,
             is_complete,
         };
         window.emit("overlay-data", payload)
@@ -303,7 +307,7 @@ mod window_management {
 
         if !permission_check.status.success() {
             let error_msg = String::from_utf8_lossy(&permission_check.stderr);
-            return Err(format!("Accessibility permissions required. Please grant Lighthouse access in System Settings → Privacy & Security → Accessibility. Error: {}", error_msg));
+            return Err(format!("Accessibility permissions required. Please grant SnowKite access in System Settings → Privacy & Security → Accessibility. Error: {}", error_msg));
         }
 
         // Use AppleScript to get window list - iterate through ALL windows for each process
@@ -313,7 +317,7 @@ mod window_management {
                 set allProcesses to every process whose background only is false
                 repeat with proc in allProcesses
                     set procName to name of proc
-                    if procName is not "Lighthouse" then
+                    if procName is not "SnowKite" then
                         set procID to unix id of proc
                         set winList to windows of proc
                         if (count of winList) > 0 then
@@ -341,7 +345,7 @@ mod window_management {
 
         let stderr = String::from_utf8_lossy(&output.stderr);
         if !stderr.is_empty() {
-            println!("[Lighthouse] AppleScript stderr: {:?}", stderr);
+            println!("[SnowKite] AppleScript stderr: {:?}", stderr);
         }
 
         if !output.status.success() {
@@ -349,7 +353,7 @@ mod window_management {
         }
 
         let result = String::from_utf8_lossy(&output.stdout);
-        println!("[Lighthouse] AppleScript output: {:?}", result);
+        println!("[SnowKite] AppleScript output: {:?}", result);
 
         // Parse the AppleScript result - format is: app1|window1|pid1|winID1\napp2|window2|pid2|winID2\n...
         let mut windows = Vec::new();
@@ -367,7 +371,7 @@ mod window_management {
                 let process_id = parts[2].trim().parse::<i32>().unwrap_or(0);
                 let window_id = parts[3].trim().parse::<i64>().unwrap_or(0);
 
-                println!("[Lighthouse] Found window: {} - {} (PID: {}, WinID: {})", owner_name, window_name, process_id, window_id);
+                println!("[SnowKite] Found window: {} - {} (PID: {}, WinID: {})", owner_name, window_name, process_id, window_id);
 
                 windows.push(FocusedWindowInfo {
                     owner_name,
@@ -378,15 +382,15 @@ mod window_management {
             }
         }
 
-        println!("[Lighthouse] Total windows found: {}", windows.len());
+        println!("[SnowKite] Total windows found: {}", windows.len());
         Ok(windows)
     }
 
     pub fn arrange_windows(
         focused_window: &FocusedWindowInfo,
-        _lighthouse_window: &WebviewWindow
+        _snowkite_window: &WebviewWindow
     ) -> Result<(), String> {
-        println!("[Lighthouse] Starting window arrangement for: {}", focused_window.owner_name);
+        println!("[SnowKite] Starting window arrangement for: {}", focused_window.owner_name);
 
         // Get screen dimensions
         let screens = Screen::all().map_err(|e| e.to_string())?;
@@ -395,19 +399,19 @@ mod window_management {
         let screen_width = screen.display_info.width as f64;
         let screen_height = screen.display_info.height as f64;
 
-        println!("[Lighthouse] Screen dimensions: {}x{}", screen_width, screen_height);
+        println!("[SnowKite] Screen dimensions: {}x{}", screen_width, screen_height);
 
         // Calculate dimensions
         let focused_width = screen_width * 0.75;
-        let lighthouse_width = screen_width * 0.25;
+        let snowkite_width = screen_width * 0.25;
 
-        println!("[Lighthouse] Resizing Lighthouse window to {}x{} at position ({}, 0)", lighthouse_width, screen_height, focused_width);
+        println!("[SnowKite] Resizing SnowKite window to {}x{} at position ({}, 0)", snowkite_width, screen_height, focused_width);
 
-        // Use AppleScript to move Lighthouse window (same approach that works for Chrome/Cursor)
-        let lighthouse_script = format!(
+        // Use AppleScript to move SnowKite window (same approach that works for Chrome/Cursor)
+        let snowkite_script = format!(
             r#"
             tell application "System Events"
-                tell process "Lighthouse"
+                tell process "SnowKite"
                     tell window 1
                         set position to {{{}, 0}}
                         set size to {{{}, {}}}
@@ -416,27 +420,27 @@ mod window_management {
             end tell
             "#,
             focused_width as i32,
-            lighthouse_width as i32,
+            snowkite_width as i32,
             screen_height as i32
         );
 
-        let lighthouse_output = std::process::Command::new("osascript")
+        let snowkite_output = std::process::Command::new("osascript")
             .arg("-e")
-            .arg(&lighthouse_script)
+            .arg(&snowkite_script)
             .output()
-            .map_err(|e| format!("Failed to execute AppleScript for Lighthouse: {}", e))?;
+            .map_err(|e| format!("Failed to execute AppleScript for SnowKite: {}", e))?;
 
-        if !lighthouse_output.status.success() {
-            let error = String::from_utf8_lossy(&lighthouse_output.stderr);
-            println!("[Lighthouse] AppleScript error for Lighthouse window: {}", error);
+        if !snowkite_output.status.success() {
+            let error = String::from_utf8_lossy(&snowkite_output.stderr);
+            println!("[SnowKite] AppleScript error for SnowKite window: {}", error);
         } else {
-            println!("[Lighthouse] Lighthouse window repositioned via AppleScript");
+            println!("[SnowKite] SnowKite window repositioned via AppleScript");
         }
 
         // Position focused window (left 3/4)
         // Calculate window index from window_id (format: process_id * 1000 + window_index)
         let window_index = ((focused_window.window_id % 1000) as i32).max(1);
-        println!("[Lighthouse] Positioning {} window #{} to {}x{}", focused_window.owner_name, window_index, focused_width as i32, screen_height as i32);
+        println!("[SnowKite] Positioning {} window #{} to {}x{}", focused_window.owner_name, window_index, focused_width as i32, screen_height as i32);
 
         let script = format!(
             r#"
@@ -464,11 +468,11 @@ mod window_management {
 
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr);
-            println!("[Lighthouse] AppleScript error: {}", error);
+            println!("[SnowKite] AppleScript error: {}", error);
             return Err(format!("Failed to position window: {}", error));
         }
 
-        println!("[Lighthouse] Window arrangement completed successfully");
+        println!("[SnowKite] Window arrangement completed successfully");
         Ok(())
     }
 }
@@ -486,10 +490,10 @@ async fn arrange_windows(
     state: tauri::State<'_, AppState>,
     window_info: FocusedWindowInfo
 ) -> Result<(), String> {
-    let lighthouse_window = app.get_webview_window("main")
-        .ok_or("Could not find Lighthouse main window")?;
+    let snowkite_window = app.get_webview_window("main")
+        .ok_or("Could not find SnowKite main window")?;
 
-    window_management::arrange_windows(&window_info, &lighthouse_window)?;
+    window_management::arrange_windows(&window_info, &snowkite_window)?;
 
     // Save to state and disk
     *state.focused_window.lock().unwrap() = Some(window_info.clone());
@@ -539,11 +543,11 @@ async fn show_main_window(app: tauri::AppHandle, state: tauri::State<'_, AppStat
         {
             let focused_window = state.focused_window.lock().unwrap().clone();
             if let Some(window_info) = focused_window {
-                println!("[Lighthouse] Auto-arranging with saved window: {:?}", window_info);
+                println!("[SnowKite] Auto-arranging with saved window: {:?}", window_info);
                 // Try to arrange windows, but don't fail if it doesn't work
                 // (e.g., if the window no longer exists)
                 if let Err(e) = window_management::arrange_windows(&window_info, &window) {
-                    println!("[Lighthouse] Failed to auto-arrange: {}", e);
+                    println!("[SnowKite] Failed to auto-arrange: {}", e);
                     // Clear the saved state since the window probably doesn't exist anymore
                     *state.focused_window.lock().unwrap() = None;
                     // Optionally delete from disk
@@ -612,7 +616,7 @@ pub fn run() {
           .id("settings")
           .accelerator("Cmd+,")
           .build(app)?;
-        let app_menu = SubmenuBuilder::new(app, "Lighthouse")
+        let app_menu = SubmenuBuilder::new(app, "SnowKite")
           .item(&settings)
           .build()?;
         let menu = MenuBuilder::new(app)
@@ -631,39 +635,39 @@ pub fn run() {
         });
 
         // ========== TRAY ICON INITIALIZATION WITH DIAGNOSTICS ==========
-        println!("[Lighthouse] ====== System Information ======");
-        println!("[Lighthouse] macOS version: {:?}", std::env::var("OSTYPE").unwrap_or_else(|_| "unknown".to_string()));
-        println!("[Lighthouse] Architecture: {}", std::env::consts::ARCH);
-        println!("[Lighthouse] OS: {}", std::env::consts::OS);
-        println!("[Lighthouse] ================================");
+        println!("[SnowKite] ====== System Information ======");
+        println!("[SnowKite] macOS version: {:?}", std::env::var("OSTYPE").unwrap_or_else(|_| "unknown".to_string()));
+        println!("[SnowKite] Architecture: {}", std::env::consts::ARCH);
+        println!("[SnowKite] OS: {}", std::env::consts::OS);
+        println!("[SnowKite] ================================");
 
-        println!("[Lighthouse] Attempting to create system tray icon...");
+        println!("[SnowKite] Attempting to create system tray icon...");
 
         // Try to get the default window icon with detailed logging
         let icon_result = app.default_window_icon();
         let icon = match icon_result {
             Some(icon) => {
-                println!("[Lighthouse] ✓ Default window icon loaded successfully");
+                println!("[SnowKite] ✓ Default window icon loaded successfully");
                 icon.clone()
             }
             None => {
-                eprintln!("[Lighthouse] ✗ ERROR: Default window icon not available");
-                eprintln!("[Lighthouse] ✗ ERROR: Cannot create tray icon without an icon");
-                eprintln!("[Lighthouse] ✗ This usually means:");
-                eprintln!("[Lighthouse]   - Icon files are missing from the bundle");
-                eprintln!("[Lighthouse]   - Icon files are corrupted");
-                eprintln!("[Lighthouse]   - The app bundle was not built correctly");
-                eprintln!("[Lighthouse] ✗ Please rebuild the app with: cargo build --release");
+                eprintln!("[SnowKite] ✗ ERROR: Default window icon not available");
+                eprintln!("[SnowKite] ✗ ERROR: Cannot create tray icon without an icon");
+                eprintln!("[SnowKite] ✗ This usually means:");
+                eprintln!("[SnowKite]   - Icon files are missing from the bundle");
+                eprintln!("[SnowKite]   - Icon files are corrupted");
+                eprintln!("[SnowKite]   - The app bundle was not built correctly");
+                eprintln!("[SnowKite] ✗ Please rebuild the app with: cargo build --release");
                 return Err("Failed to load tray icon: no default window icon available".into());
             }
         };
 
         // Build tray icon with error handling
-        println!("[Lighthouse] Building tray icon...");
+        println!("[SnowKite] Building tray icon...");
         let tray_result = TrayIconBuilder::new()
           .icon(icon)
           .icon_as_template(true)
-          .tooltip("Lighthouse")
+          .tooltip("SnowKite")
           .on_tray_icon_event(|tray, event| {
             if let tauri::tray::TrayIconEvent::Click {
               button: MouseButton::Left,
@@ -685,22 +689,22 @@ pub fn run() {
                 // Keep tray icon alive for the lifetime of the app
                 let state = app.state::<AppState>();
                 *state.tray_icon.lock().unwrap() = Some(tray);
-                println!("[Lighthouse] ✓ System tray icon created successfully!");
-                println!("[Lighthouse] ✓ App should be visible in menu bar");
+                println!("[SnowKite] ✓ System tray icon created successfully!");
+                println!("[SnowKite] ✓ App should be visible in menu bar");
             }
             Err(e) => {
-                eprintln!("[Lighthouse] ✗ ERROR: Failed to create tray icon: {:?}", e);
-                eprintln!("[Lighthouse] ✗ The app will be invisible without a tray icon!");
+                eprintln!("[SnowKite] ✗ ERROR: Failed to create tray icon: {:?}", e);
+                eprintln!("[SnowKite] ✗ The app will be invisible without a tray icon!");
                 return Err(format!("Failed to build tray icon: {:?}", e).into());
             }
         }
-        println!("[Lighthouse] ========================================");
+        println!("[SnowKite] ========================================");
 
         // Load saved window state but don't auto-arrange
         let app_handle = app.handle().clone();
         let state = app.state::<AppState>();
         if let Some(saved_window) = AppState::load_from_disk(&app_handle) {
-          println!("[Lighthouse] Found saved window: {:?}", saved_window);
+          println!("[SnowKite] Found saved window: {:?}", saved_window);
           *state.focused_window.lock().unwrap() = Some(saved_window.clone());
         }
 

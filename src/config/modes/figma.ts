@@ -1,9 +1,10 @@
 // Figma mode configuration
 import type { AppModeConfig } from '@/types/app-mode'
-import type { PrebuiltGuide } from '@/types/walkthrough'
+import type { GuideDefinition } from '@/types/guide'
 
-const guides: PrebuiltGuide[] = [
+const guides: GuideDefinition[] = [
   {
+    source: 'static',
     id: 'crop-image',
     title: 'Crop an image',
     topic: 'Basics',
@@ -13,7 +14,6 @@ const guides: PrebuiltGuide[] = [
       {
         caption: 'Select Image',
         instruction: 'Select the image you want to crop',
-        observation: 'I see three images on your canvas - select one by clicking on it.',
         points: [{ x: 0.5, y: 0.5 }]
       },
       {
@@ -44,6 +44,7 @@ const guides: PrebuiltGuide[] = [
     ]
   },
   {
+    source: 'static',
     id: 'create-frame',
     title: 'Create a new frame',
     topic: 'Basics',
@@ -62,12 +63,12 @@ const guides: PrebuiltGuide[] = [
       },
       {
         caption: 'Draw Frame',
-        instruction: 'Click and drag on the canvas to create your frame',
-        observation: 'You can also click once to create a frame at the default size.'
+        instruction: 'Click and drag on the canvas to create your frame'
       }
     ]
   },
   {
+    source: 'static',
     id: 'add-components',
     title: 'Add components to your design',
     topic: 'Basics',
@@ -83,19 +84,18 @@ const guides: PrebuiltGuide[] = [
         points: [{ x: 0.84, y: 0.5 }]
       },
       {
-        instruction: 'Drag the component onto your frame',
-        observation: 'Components can be customized and reused across your design.'
+        instruction: 'Drag the component onto your frame'
       }
     ]
   },
   {
+    source: 'static',
     id: 'export-assets',
     title: 'Export design assets',
     topic: 'Export',
     steps: [
       {
-        instruction: 'Select the element or frame you want to export',
-        observation: 'You can select multiple elements by holding Shift and clicking.'
+        instruction: 'Select the element or frame you want to export'
       },
       {
         instruction: 'Open the Export section in the right sidebar',
@@ -112,6 +112,7 @@ const guides: PrebuiltGuide[] = [
     ]
   },
   {
+    source: 'static',
     id: 'prototype-flow',
     title: 'Create a prototype flow',
     topic: 'Prototyping',
@@ -121,8 +122,7 @@ const guides: PrebuiltGuide[] = [
         points: [{ x: 0.85, y: 0.05 }]
       },
       {
-        instruction: 'Select an element and drag the connection point to another frame',
-        observation: 'This creates an interaction between frames.'
+        instruction: 'Select an element and drag the connection point to another frame'
       },
       {
         instruction: 'Configure the interaction (on click, hover, etc.)',
