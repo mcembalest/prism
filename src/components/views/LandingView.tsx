@@ -17,6 +17,7 @@ interface LandingViewProps {
     onSearchChange: (query: string) => void
     onInputChange: (value: string) => void
     onSend: () => void
+    onResetChat?: () => void
     scrollRef: React.RefObject<HTMLDivElement>
 }
 
@@ -29,6 +30,7 @@ export function LandingView({
     onTopicSelect,
     onInputChange,
     onSend,
+    onResetChat,
     scrollRef
 }: LandingViewProps) {
     
@@ -66,6 +68,8 @@ export function LandingView({
                 onSend={onSend}
                 isProcessing={isProcessing}
                 statusMessage={statusMessage}
+                onResetChat={onResetChat}
+                showResetButton={messages.length > 0}
             />
         </div>
     )

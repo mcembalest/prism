@@ -124,7 +124,14 @@ export interface Message {
   image?: string
   points?: Point[]
   caption?: string
-  variant?: 'assistant' | 'instruction'
+  variant?: 'assistant' | 'instruction' | 'metadata'
+  metadata?: {
+    type: 'tool_use' | 'system' | 'thinking'
+    toolName?: string
+    toolInput?: any
+    details?: string
+  }
+  filesRead?: string[]
 }
 
 export type IntentType = 'query' | 'point' | 'detect' | 'walkthrough' | 'text-only'

@@ -4,19 +4,28 @@ import { listen } from '@tauri-apps/api/event'
 import { Card } from '@/components/ui/card'
 import { DraggableHeader } from './DraggableHeader'
 import { SelectionBanner } from './SelectionBanner'
+import { Toast } from './Toast'
 import { LandingView } from './views/LandingView'
 import { TopicView } from './views/TopicView'
 import { WalkthroughView } from './views/WalkthroughView'
 import { getModeConfig, productMode } from '@/config/modes'
 import { geminiService } from '@/services/gemini'
+import { claudeService } from '@/services/claude'
 import { useOverlayManager } from '@/hooks/useOverlayManager'
 import { useViewNavigation } from '@/hooks/useViewNavigation'
 import { useMessages } from '@/hooks/useMessages'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useGuideSession } from '@/hooks/useGuideSession'
-import { createAssistantMessage } from '@/utils/messageHelpers'
+import { createAssistantMessage, createSearchingMessage } from '@/utils/messageHelpers'
+import { convertClaudeEventToMessages, createUserMessage, getRelativeFilePath } from '@/utils/claudeHelpers'
 import { EVENTS, TAURI_COMMANDS, TIMING, VIEWS } from '@/utils/constants'
 import type { Message } from '@/types/guide'
+
+interface ToastState {
+    id: string
+    message: string
+    type: 'error' | 'info' | 'success'
+}
 
 export function SnowKiteContainer() {
     // Mode configuration
@@ -24,6 +33,9 @@ export function SnowKiteContainer() {
 
     // Selection mode state
     const [isSelectionMode, setIsSelectionMode] = useState(false)
+
+    // Toast notifications state
+    const [toasts, setToasts] = useState<ToastState[]>([])
 
     // Scroll ref for auto-scroll
     const scrollRef = useRef<HTMLDivElement>(null)
@@ -93,6 +105,16 @@ export function SnowKiteContainer() {
     useEffect(() => {
         keyboard.registerProceedHandler(handleUnifiedProceed)
     }, [keyboard.registerProceedHandler, handleUnifiedProceed])
+
+    // Toast helper
+    const showToast = useCallback((message: string, type: 'error' | 'info' | 'success' = 'error') => {
+        const id = `toast-${Date.now()}`
+        setToasts(prev => [...prev, { id, message, type }])
+    }, [])
+
+    const dismissToast = useCallback((id: string) => {
+        setToasts(prev => prev.filter(toast => toast.id !== id))
+    }, [])
 
     // AI Chat helpers
     const takeScreenshot = useCallback(async (): Promise<string> => {
@@ -170,40 +192,99 @@ export function SnowKiteContainer() {
         [guide, navigation]
     )
 
+    const handleClaudeQuery = useCallback(
+        async (query: string) => {
+            try {
+                // Show searching message
+                const searchingMessage = createSearchingMessage(query)
+                messages.addMessage(searchingMessage)
+
+                // Track files read across all events in this query
+                const filesReadInSession: string[] = []
+                let searchingMessageRemoved = false
+
+                // Stream Claude responses
+                for await (const event of claudeService.queryStream({
+                    prompt: query,
+                    cwd: "data/rocketalumni/",
+                    allowedTools: ["Read", "Glob", "Grep"],
+                    sessionId: claudeService.getSessionId() || undefined,
+                    systemPrompt: modeConfig.aiContextPrompt
+                })) {
+                    // Handle error events with toasts instead of messages
+                    if (event.type === 'error') {
+                        showToast(event.error || 'An unknown error occurred')
+                        continue
+                    }
+                    if (event.type === 'result' && event.subtype === 'error' && event.error) {
+                        showToast(event.error)
+                        continue
+                    }
+
+                    // Collect files from Read tools across all events
+                    if (event.type === 'assistant') {
+                        const content = event.message.content || []
+
+                        // Remove searching message when first text content arrives
+                        if (!searchingMessageRemoved) {
+                            const hasTextContent = content.some(item => item.type === 'text' && item.text)
+                            if (hasTextContent) {
+                                messages.setMessages(prev => prev.filter(msg => msg.id !== searchingMessage.id))
+                                searchingMessageRemoved = true
+                            }
+                        }
+
+                        for (const item of content) {
+                            if (item.type === 'tool_use' && item.name === 'Read' && item.input) {
+                                const relativePath = getRelativeFilePath(item.input)
+                                if (relativePath) {
+                                    filesReadInSession.push(relativePath)
+                                }
+                            }
+                        }
+                    }
+
+                    const newMessages = convertClaudeEventToMessages(event)
+
+                    // Attach accumulated files to text messages
+                    newMessages.forEach(msg => {
+                        if (msg.variant === 'assistant' && msg.role === 'assistant' && msg.content !== '...') {
+                            if (filesReadInSession.length > 0) {
+                                msg.filesRead = [...filesReadInSession]
+                            }
+                        }
+                        messages.addMessage(msg)
+                    })
+                }
+            } catch (error) {
+                console.error('Claude query error:', error)
+                showToast(error instanceof Error ? error.message : String(error))
+            }
+        },
+        [messages, modeConfig.aiContextPrompt, showToast]
+    )
+
     // Main send handler
     const handleSend = useCallback(async () => {
         if (!messages.input.trim() || messages.isProcessing) return
 
-        const userMessage = createAssistantMessage(messages.input)
-        userMessage.role = 'user'
-
+        const userMessage = createUserMessage(messages.input)
         const query = messages.input
         messages.setInput('')
 
-        // Mock responses for landing and active guide views
+        // Use Claude for landing and active guide views
         if (navigation.currentView === VIEWS.LANDING || navigation.currentView === VIEWS.ACTIVE_GUIDE) {
             messages.addMessage(userMessage)
             messages.setIsProcessing(true)
 
-            let mockResponse = ''
-            if (navigation.currentView === VIEWS.LANDING) {
-                mockResponse = modeConfig.welcomeMessage || 'I can help you get started! Try selecting one of the guides above, or ask me a question.'
-            } else if (navigation.currentView === VIEWS.ACTIVE_GUIDE && guide.activeGuide) {
-                const guideName = guide.activeGuide.guide.title || guide.activeGuide.guide.goal || 'this guide'
-                const currentStep = guide.activeGuide.currentStepIndex + 1
-                mockResponse = `You're on step ${currentStep} of "${guideName}". ${
-                    query.toLowerCase().includes('help') || query.toLowerCase().includes('stuck')
-                        ? 'Try following the instruction above. You can also skip this step if needed.'
-                        : 'What specific part would you like help with?'
-                }`
+            try {
+                await handleClaudeQuery(query)
+            } finally {
+                messages.setIsProcessing(false)
             }
-
-            await showTypingThenMessage(() => createAssistantMessage(mockResponse), 600)
-            messages.setIsProcessing(false)
             return
         }
 
-        // Full AI logic for aiChat view
         if (!guide.activeGuide) {
             messages.clearMessages()
         }
@@ -234,11 +315,11 @@ export function SnowKiteContainer() {
             }
         } catch (error) {
             console.error('Error details:', error)
-            messages.addMessage(createAssistantMessage(`Error: ${error instanceof Error ? error.message : String(error)}`))
+            showToast(error instanceof Error ? error.message : String(error))
         } finally {
             messages.setIsProcessing(false)
         }
-    }, [messages, navigation, guide, modeConfig, showTypingThenMessage, handleTextOnlyIntent, handlePointIntent, handleQueryIntent, handleWalkthroughIntent])
+    }, [messages, navigation, guide, modeConfig, showTypingThenMessage, handleTextOnlyIntent, handlePointIntent, handleQueryIntent, handleWalkthroughIntent, handleClaudeQuery, showToast])
 
     // Guide start handler
     const startGuideHandler = useCallback(
@@ -251,6 +332,12 @@ export function SnowKiteContainer() {
         },
         [guide, navigation, modeConfig.guides]
     )
+
+    // Reset chat handler that also clears Claude session
+    const handleResetChat = useCallback(() => {
+        messages.resetChat()
+        claudeService.resetSession()
+    }, [messages])
 
     // Back handler
     const handleBack = useCallback(async () => {
@@ -288,6 +375,7 @@ export function SnowKiteContainer() {
                     onSearchChange={navigation.setSearchQuery}
                     onInputChange={messages.setInput}
                     onSend={handleSend}
+                    onResetChat={handleResetChat}
                     scrollRef={scrollRef}
                 />
             )}
@@ -308,7 +396,7 @@ export function SnowKiteContainer() {
             )}
 
             {/* Active Guide / AI Chat View */}
-            {(navigation.currentView === VIEWS.ACTIVE_GUIDE || navigation.currentView === VIEWS.AI_CHAT) && (
+            {(navigation.currentView === VIEWS.ACTIVE_GUIDE) && (
                 <WalkthroughView
                     messages={messages.messages}
                     input={messages.input}
@@ -322,6 +410,7 @@ export function SnowKiteContainer() {
                     onSend={handleSend}
                     onProceedPrebuilt={guide.proceedStep}
                     onProceedAI={guide.proceedStep}
+                    onResetChat={handleResetChat}
                     scrollRef={scrollRef}
                 />
             )}
@@ -340,6 +429,17 @@ export function SnowKiteContainer() {
                     </div>
                 </div>
             )}
+
+            {/* Toast notifications */}
+            {toasts.map((toast, index) => (
+                <div key={toast.id} style={{ top: `${8 + index * 5}rem` }} className="absolute">
+                    <Toast
+                        message={toast.message}
+                        type={toast.type}
+                        onDismiss={() => dismissToast(toast.id)}
+                    />
+                </div>
+            ))}
         </Card>
     )
 }

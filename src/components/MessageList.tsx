@@ -17,18 +17,21 @@ export const MessageList = memo(function MessageList({ messages }: MessageListPr
 
     return (
         <div className="space-y-2">
-            {messages.map((message) => (
-                <div
-                    key={message.id}
-                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                    <MessageBubble
-                        content={message.content}
-                        role={message.role}
-                        variant={message.variant}
-                    />
-                </div>
-            ))}
+            {messages
+                .filter((message) => message.variant !== 'metadata' || message.metadata?.type === 'system')
+                .map((message) => (
+                    <div
+                        key={message.id}
+                        className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                        <MessageBubble
+                            content={message.content}
+                            role={message.role}
+                            variant={message.variant}
+                            filesRead={message.filesRead}
+                        />
+                    </div>
+                ))}
         </div>
     )
 })

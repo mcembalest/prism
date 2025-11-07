@@ -1,5 +1,5 @@
 import React from 'react'
-import { Plus, Camera, Mic, ArrowUp } from 'lucide-react'
+import { ArrowUp, RotateCcw } from 'lucide-react'
 
 interface ChatInputProps {
   value: string
@@ -8,6 +8,8 @@ interface ChatInputProps {
   isProcessing: boolean
   placeholder?: string
   statusMessage?: string
+  onResetChat?: () => void
+  showResetButton?: boolean
 }
 
 export function ChatInput({
@@ -16,7 +18,9 @@ export function ChatInput({
   onSend,
   isProcessing,
   placeholder = "Ask a question",
-  statusMessage
+  statusMessage,
+  onResetChat,
+  showResetButton = false
 }: ChatInputProps) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -41,24 +45,16 @@ export function ChatInput({
           className="flex-1 bg-transparent text-white placeholder:text-zinc-500 border-none focus:outline-none text-sm min-w-0"
         />
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button
-            className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
-            aria-label="Add attachment"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-          <button
-            className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
-            aria-label="Add image"
-          >
-            <Camera className="h-4 w-4" />
-          </button>
-          <button
-            className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
-            aria-label="Voice input"
-          >
-            <Mic className="h-4 w-4" />
-          </button>
+          {showResetButton && onResetChat && (
+            <button
+              onClick={onResetChat}
+              className="p-1 hover:bg-zinc-700/50 rounded-full transition-colors text-zinc-400 hover:text-zinc-300"
+              aria-label="Reset chat"
+              title="Reset chat"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             onClick={onSend}
             disabled={!value.trim() || isProcessing}

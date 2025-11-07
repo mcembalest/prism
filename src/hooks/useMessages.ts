@@ -12,12 +12,14 @@ export interface UseMessagesReturn {
   messages: Message[]
   input: string
   isProcessing: boolean
+  messageHistory: Message[][]
 
   // Actions
   setInput: (value: string) => void
   addMessage: (message: Message) => void
   addMessages: (newMessages: Message[]) => void
   clearMessages: () => void
+  resetChat: () => void
   setIsProcessing: (processing: boolean) => void
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
 }
@@ -32,6 +34,7 @@ export function useMessages(): UseMessagesReturn {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [messageHistory, setMessageHistory] = useState<Message[][]>([])
 
   // Add a single message (memoized)
   const addMessage = useCallback((message: Message) => {
@@ -49,14 +52,26 @@ export function useMessages(): UseMessagesReturn {
     setInput('')
   }, [])
 
+  // Reset chat and save current messages to history
+  const resetChat = useCallback(() => {
+    if (messages.length > 0) {
+      setMessageHistory(prev => [...prev, messages])
+    }
+    setMessages([])
+    setInput('')
+    setIsProcessing(false)
+  }, [messages])
+
   return {
     messages,
     input,
     isProcessing,
+    messageHistory,
     setInput,
     addMessage,
     addMessages,
     clearMessages,
+    resetChat,
     setIsProcessing,
     setMessages,
   }

@@ -17,6 +17,7 @@ interface WalkthroughViewProps {
     onSend: () => void
     onProceedPrebuilt: () => void
     onProceedAI: () => void
+    onResetChat?: () => void
     scrollRef: React.RefObject<HTMLDivElement>
 }
 
@@ -33,6 +34,7 @@ export function WalkthroughView({
     onSend,
     onProceedPrebuilt,
     onProceedAI,
+    onResetChat,
     scrollRef
 }: WalkthroughViewProps) {
     const isPrebuiltGuide = prebuiltGuideSession !== null
@@ -159,6 +161,8 @@ export function WalkthroughView({
                 onSend={onSend}
                 isProcessing={isProcessing}
                 statusMessage={statusMessage}
+                onResetChat={onResetChat}
+                showResetButton={messages.length > 0 && !isPrebuiltGuide}
             />
         </div>
     )

@@ -1,4 +1,4 @@
-import type { Message } from '@/types/walkthrough'
+import type { Message } from '@/types/guide'
 
 type AssistantMessageOptions = Partial<Omit<Message, 'id' | 'role' | 'content'>>
 
@@ -20,5 +20,16 @@ export const createUserMessage = (content: string): Message => ({
     role: 'user',
     content,
     variant: 'assistant'
+})
+
+export const createSearchingMessage = (query: string): Message => ({
+    id: `searching-${Date.now()}`,
+    role: 'assistant',
+    content: `Searching for '${query}'...`,
+    variant: 'metadata',
+    metadata: {
+        type: 'system',
+        details: 'searching'
+    }
 })
 

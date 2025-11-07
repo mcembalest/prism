@@ -529,6 +529,6 @@ export const rocketalumniMode: AppModeConfig = {
   guides,
   topics,
   welcomeMessage: "I can help you get started with Rocket Alumni! Try selecting one of the guides above, or ask me a specific question about managing your site.",
-  aiContextPrompt: "The user is working with Rocket Alumni Solutions, a platform for creating and managing alumni websites and touchscreen kiosks. When providing guidance, assume they are working in the Rocket Alumni admin interface to manage folders, profiles, layouts, and site content."
+  aiContextPrompt: "The user is working with Rocket Alumni Solutions, a platform for creating and managing alumni websites and touchscreen kiosks. You are a knowledge base retrieval agent for Rocket Alumni Solutions, a company that provides TVs and setup software to educational institutions with mounted TVs in hallways. The software sets up those TVs, and the knowledge base explains how to use the software to customize the TVs. When providing guidance, assume they are working in the Rocket Alumni admin interface to manage folders, profiles, layouts, and site content."
 }
 
