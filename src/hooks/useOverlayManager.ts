@@ -16,13 +16,16 @@ export function useOverlayManager() {
         isComplete?: boolean
     ) => {
         try {
+            // DEBUG: Log captionPosition before sending to Tauri
+            console.log('[useOverlayManager.openScreenOverlay] captionPosition:', captionPosition, 'will use:', captionPosition ?? 'down-right')
+
             await invoke('open_screen_overlay', {
                 points,
                 walkthrough_steps: walkthroughSteps,
                 current_step: currentStep,
                 instruction,
                 caption,
-                caption_position: captionPosition,
+                caption_position: captionPosition ?? 'down-right',
                 is_complete: isComplete
             })
             overlayWindowExistsRef.current = true
@@ -42,6 +45,9 @@ export function useOverlayManager() {
         isComplete: boolean = false
     ) => {
         try {
+            // DEBUG: Log captionPosition before sending to Tauri
+            console.log('[useOverlayManager.updateOverlay] captionPosition:', captionPosition, 'will use:', captionPosition ?? 'down-right')
+
             if (overlayWindowExistsRef.current) {
                 await invoke('update_screen_overlay_data', {
                     points,
@@ -49,7 +55,7 @@ export function useOverlayManager() {
                     current_step: currentStep,
                     instruction,
                     caption,
-                    caption_position: captionPosition,
+                    caption_position: captionPosition ?? 'down-right',
                     is_complete: isComplete
                 })
             } else {

@@ -17,6 +17,9 @@ export const TIMING = {
   /** Delay for typing animation effect */
   TYPING_DELAY: 300,
 
+  /** Delay before showing status messages (thinking, searching) */
+  STATUS_DELAY: 250,
+
   /** Delay before showing ellipsis in AI response */
   ELLIPSIS_DELAY: 1000,
 

@@ -165,6 +165,7 @@ export interface WalkthroughStepResult {
   caption: string
   instruction: string
   points: Point[]
+  captionPosition?: CaptionPosition
   isComplete: boolean
   request_id?: string
 }

@@ -51,42 +51,8 @@ export function convertClaudeEventToMessages(event: ClaudeEvent): Message[] {
                 })
             }
 
-            // Tool use - show as metadata
-            if (item.type === 'tool_use' && item.name) {
-                // Skip Bash commands - they're internal operations
-                if (item.name === 'Bash') {
-                    continue
-                }
-
-                const toolName = formatToolName(item.name)
-                let displayInput = item.input
-
-                // For Grep/Glob, show the search pattern
-                if (item.name === 'Grep' && item.input?.pattern) {
-                    displayInput = { query: item.input.pattern }
-                } else if (item.name === 'Glob' && item.input?.pattern) {
-                    displayInput = { query: item.input.pattern }
-                }
-                // For Read tool, show the relative filepath
-                else if (item.name === 'Read' && item.input) {
-                    const relativePath = getRelativeFilePath(item.input)
-                    if (relativePath) {
-                        displayInput = { file: relativePath }
-                    }
-                }
-
-                messages.push({
-                    id: `tool-${event.session_id}-${Date.now()}-${Math.random()}`,
-                    role: 'assistant',
-                    content: `Using tool: ${toolName}`,
-                    variant: 'metadata',
-                    metadata: {
-                        type: 'tool_use',
-                        toolName: toolName,
-                        toolInput: displayInput
-                    }
-                })
-            }
+            // Tool use - skip creating messages, files are tracked in SnowKiteContainer
+            // and attached to assistant messages via filesRead property
         }
     } else if (event.type === 'result') {
         // Skip success results - they duplicate the last assistant message

@@ -1,6 +1,7 @@
-import { memo, useState } from 'react'
+import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { SearchSummary } from './SearchSummary'
 
 interface MessageBubbleProps {
     content: string
@@ -47,66 +48,68 @@ const TypingIndicator = () => (
     </div>
 )
 
-const messageVariantStyles: Record<'assistant' | 'instruction' | 'metadata', string> = {
-    assistant: 'bg-zinc-800/80 text-gray-100 border border-zinc-700/50',
-    instruction: 'bg-indigo-500/15 text-indigo-100 border border-indigo-400/40',
-    metadata: 'bg-zinc-900/50 text-zinc-500 border-none'
-}
-
 /**
  * MessageBubble component - displays a single chat message
  * Memoized to prevent unnecessary re-renders when parent updates
+ *
+ * Design pattern from mockups:
+ * - User messages: Dark bubble pills on the right
+ * - Assistant messages: Plain text with NO BUBBLE on the left
  */
 export const MessageBubble = memo(function MessageBubble({ content, role, variant = 'assistant', filesRead }: MessageBubbleProps) {
-    const [isFilesExpanded, setIsFilesExpanded] = useState(false)
     const isUser = role === 'user'
-    const isInstruction = !isUser && variant === 'instruction'
     const isTyping = content === '...'
 
-    const bubbleClasses = isUser
-        ? 'p-2 bg-gradient-to-br from-blue-600 to-blue-700 text-white'
-        : `p-3 ${messageVariantStyles[variant]}`
+    // User messages get dark bubble, assistant messages get NO bubble
+    if (isUser) {
+        return (
+            <div className="max-w-[60%] rounded-full px-4 py-2 bg-primary text-primary-foreground">
+                <div className="text-sm leading-relaxed">
+                    {content}
+                </div>
+            </div>
+        )
+    }
 
+    // Assistant messages - NO BUBBLE, just plain text with fade-in animation
     return (
-        <div className={`max-w-[60%] rounded-xl ${bubbleClasses}`}>
-            {isInstruction && (
-                <span className="block text-[7px] font-semibold uppercase tracking-wide mb-1 text-indigo-500">
-                    Instruction
-                </span>
-            )}
+        <div className="max-w-[80%] animate-in fade-in duration-300">
             {isTyping ? (
                 <TypingIndicator />
             ) : (
                 <>
-                    <div className="text-xs leading-relaxed prose prose-invert prose-sm max-w-none">
+                    {filesRead && filesRead.length > 0 && (
+                        <SearchSummary files={filesRead} />
+                    )}
+                    <div className={variant === 'metadata' ? 'text-xs text-muted-foreground leading-relaxed' : 'text-sm leading-relaxed'}>
                         <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{
                                 // Customize markdown elements to match our styling
                                 p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                                h1: ({ children }) => <h1 className="text-sm font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
-                                h2: ({ children }) => <h2 className="text-sm font-bold mb-2 mt-2 first:mt-0">{children}</h2>,
-                                h3: ({ children }) => <h3 className="text-xs font-bold mb-1 mt-2 first:mt-0">{children}</h3>,
+                                h1: ({ children }) => <h1 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
+                                h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-2 first:mt-0">{children}</h2>,
+                                h3: ({ children }) => <h3 className="text-sm font-bold mb-1 mt-2 first:mt-0">{children}</h3>,
                                 ul: ({ children }) => <ul className="list-disc list-inside space-y-1 mb-2">{children}</ul>,
                                 ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 mb-2">{children}</ol>,
                                 li: ({ children }) => <li className="ml-2">{children}</li>,
                                 code: ({ children, className }) => {
                                     const isInline = !className
                                     return isInline ? (
-                                        <code className="bg-zinc-700/50 px-1 py-0.5 rounded text-[10px] font-mono">
+                                        <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">
                                             {children}
                                         </code>
                                     ) : (
-                                        <code className="block bg-zinc-700/50 p-2 rounded text-[10px] font-mono overflow-x-auto my-2">
+                                        <code className="block bg-muted p-3 rounded text-xs font-mono overflow-x-auto my-2">
                                             {children}
                                         </code>
                                     )
                                 },
                                 pre: ({ children }) => <pre className="my-2">{children}</pre>,
-                                strong: ({ children }) => <strong className="font-bold text-white">{children}</strong>,
+                                strong: ({ children }) => <strong className="font-bold">{children}</strong>,
                                 em: ({ children }) => <em className="italic">{children}</em>,
                                 a: ({ children, href }) => (
-                                    <a href={href} className="text-blue-400 hover:text-blue-300 underline" target="_blank" rel="noopener noreferrer">
+                                    <a href={href} className="text-blue-500 hover:text-blue-600 underline" target="_blank" rel="noopener noreferrer">
                                         {children}
                                     </a>
                                 ),
@@ -115,34 +118,6 @@ export const MessageBubble = memo(function MessageBubble({ content, role, varian
                             {content}
                         </ReactMarkdown>
                     </div>
-                    {filesRead && filesRead.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-zinc-700/50">
-                            <button
-                                onClick={() => setIsFilesExpanded(!isFilesExpanded)}
-                                className="text-[10px] text-zinc-400 hover:text-zinc-300 transition-colors flex items-center gap-1"
-                            >
-                                <span>{filesRead.length} guide{filesRead.length > 1 ? 's' : ''} found</span>
-                                <span className="transition-transform" style={{ transform: isFilesExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-                                    ▼
-                                </span>
-                            </button>
-                            {isFilesExpanded && (
-                                <div className="mt-2 space-y-1">
-                                    {filesRead.map((file, index) => (
-                                        <a
-                                            key={index}
-                                            href="https://google.com"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="block text-[9px] text-blue-400 hover:text-blue-300 underline font-mono"
-                                        >
-                                            {file}
-                                        </a>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
                 </>
             )}
         </div>

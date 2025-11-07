@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Card } from '@/components/ui/card'
 import { DraggableHeader } from './DraggableHeader'
 import { SelectionBanner } from './SelectionBanner'
@@ -94,6 +95,31 @@ export function SnowKiteContainer() {
             }
         }
     }, [])
+
+    // Window blur listener - close overlay when window loses focus
+    useEffect(() => {
+        let unlisten: (() => void) | undefined
+
+        const setupListener = async () => {
+            const currentWindow = getCurrentWindow()
+            unlisten = await currentWindow.onFocusChanged(({ payload: focused }) => {
+                console.log('[SnowKiteContainer] Window focus changed:', focused)
+                // Commented out: This was closing overlays immediately when window lost focus
+                // if (!focused && overlayManager.overlayWindowExistsRef.current) {
+                //     console.log('[SnowKiteContainer] Window lost focus, closing overlay')
+                //     overlayManager.closeOverlay()
+                // }
+            })
+        }
+
+        setupListener()
+
+        return () => {
+            if (unlisten) {
+                unlisten()
+            }
+        }
+    }, [overlayManager])
 
     // Register unified proceed handler for keyboard shortcut
     const handleUnifiedProceed = useCallback(async () => {
@@ -195,6 +221,9 @@ export function SnowKiteContainer() {
     const handleClaudeQuery = useCallback(
         async (query: string) => {
             try {
+                // Add delay before showing searching message for professional feel
+                await new Promise(resolve => setTimeout(resolve, TIMING.STATUS_DELAY))
+
                 // Show searching message
                 const searchingMessage = createSearchingMessage(query)
                 messages.addMessage(searchingMessage)
@@ -277,6 +306,11 @@ export function SnowKiteContainer() {
             messages.addMessage(userMessage)
             messages.setIsProcessing(true)
 
+            // Navigate to walkthrough view when sending from landing page
+            if (navigation.currentView === VIEWS.LANDING) {
+                navigation.navigateToGuide()
+            }
+
             try {
                 await handleClaudeQuery(query)
             } finally {
@@ -356,7 +390,7 @@ export function SnowKiteContainer() {
     }, [messages, guide, navigation, overlayManager])
 
     return (
-        <Card className="h-screen w-full max-w-full bg-zinc-900 backdrop-blur-xl border-0 shadow-2xl overflow-hidden overflow-x-hidden flex flex-col rounded-2xl p-0">
+        <Card className="h-screen w-full max-w-full bg-background backdrop-blur-xl border-0 shadow-2xl overflow-hidden overflow-x-hidden flex flex-col rounded-2xl p-0">
             {isSelectionMode && <SelectionBanner />}
             <DraggableHeader />
 
@@ -418,13 +452,13 @@ export function SnowKiteContainer() {
             {/* Keyboard shortcut flash notification */}
             {keyboard.showShortcutFlash && (
                 <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/50 rounded-2xl px-6 py-3 shadow-2xl">
+                    <div className="bg-card backdrop-blur-xl border border-border rounded-2xl px-6 py-3 shadow-2xl">
                         <div className="flex items-center gap-3">
                             <div className="flex items-center gap-1.5">
-                                <kbd className="px-2 py-1 text-sm font-mono bg-zinc-800 rounded-lg border border-zinc-600 shadow-inner">⌘</kbd>
-                                <kbd className="px-2 py-1 text-sm font-mono bg-zinc-800 rounded-lg border border-zinc-600 shadow-inner">↵</kbd>
+                                <kbd className="px-2 py-1 text-sm font-mono bg-muted rounded-lg border border-border shadow-inner">⌘</kbd>
+                                <kbd className="px-2 py-1 text-sm font-mono bg-muted rounded-lg border border-border shadow-inner">↵</kbd>
                             </div>
-                            <span className="text-sm text-zinc-300 font-medium">Proceed</span>
+                            <span className="text-sm text-foreground font-medium">Proceed</span>
                         </div>
                     </div>
                 </div>

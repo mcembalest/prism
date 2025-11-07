@@ -89,7 +89,7 @@ export async function updateOverlayComplete(
     points: [],
     walkthrough_steps: guideState.guide.steps.length,
     current_step: guideState.guide.steps.length,
-    instruction: finalStep?.instruction || 'Guide complete!',
+    instruction: finalStep?.instruction || 'Done',
     caption: guideState.guide.title || guideState.guide.goal || '',
     is_complete: true,
   }

@@ -85,6 +85,8 @@ export function ScreenOverlay() {
         const setupListener = async () => {
             try {
                 const unlisten = await listen<OverlayData>('overlay-data', (event) => {
+                    // DEBUG: Log captionPosition received from Tauri
+                    console.log('[ScreenOverlay] Received captionPosition:', event.payload.captionPosition, 'Full payload:', event.payload)
                     setData(event.payload)
                 })
 

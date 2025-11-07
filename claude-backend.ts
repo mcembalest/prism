@@ -47,7 +47,6 @@ app.post('/api/claude/query', async (req, res) => {
             res.write(`data: ${JSON.stringify(event)}\n\n`);
         }
 
-        // End the stream
         res.write('data: [DONE]\n\n');
         res.end();
     } catch (error) {
@@ -60,13 +59,12 @@ app.post('/api/claude/query', async (req, res) => {
     }
 });
 
-// Health check endpoint
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', service: 'claude-backend' });
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Claude Backend running on http://localhost:${PORT}`);
-    console.log(`📡 Streaming endpoint: http://localhost:${PORT}/api/claude/query`);
+    console.log(`Claude Backend running on http://localhost:${PORT}`);
+    console.log(`Streaming endpoint: http://localhost:${PORT}/api/claude/query`);
 });
 

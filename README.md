@@ -1,6 +1,6 @@
 # SnowKite
 
-SnowKite is the customer co-pilot for software products, helping your customers know what to do and understand what is on their screen.
+SnowKite is the agent in your product, helping your customers understand what's going on and what to do next.
 
 ## Quick Start
 

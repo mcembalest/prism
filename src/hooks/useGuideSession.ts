@@ -90,6 +90,9 @@ export function useGuideSession(options: UseGuideSessionOptions): UseGuideSessio
       const step = guideState.guide.steps[stepIndex]
       if (!step) return
 
+      // DEBUG: Log captionPosition at source
+      console.log('[useGuideSession] Step captionPosition:', step.captionPosition, 'Full step:', step)
+
       const caption =
         step.caption ||
         guideState.guide.title ||
@@ -150,7 +153,7 @@ export function useGuideSession(options: UseGuideSessionOptions): UseGuideSessio
       // For static guides with steps, show first step
       if (guideDef.source === 'static' && guideDef.steps.length > 0) {
         const firstStep = guideDef.steps[0]
-        const stepMessage = createAssistantMessage(firstStep.instruction, {
+        const stepMessage = createAssistantMessage(`**Step 1:** ${firstStep.instruction}`, {
           variant: 'instruction',
         })
         setMessages([stepMessage])
@@ -199,7 +202,7 @@ export function useGuideSession(options: UseGuideSessionOptions): UseGuideSessio
         setActiveGuide(updatedState)
 
         // Add next step message
-        const stepMessage = createAssistantMessage(nextStep.instruction, {
+        const stepMessage = createAssistantMessage(`**Step ${nextStepIndex + 1}:** ${nextStep.instruction}`, {
           variant: 'instruction',
         })
         addMessage(stepMessage)
@@ -207,7 +210,7 @@ export function useGuideSession(options: UseGuideSessionOptions): UseGuideSessio
         // Update overlay
         await updateOverlayForStep(updatedState, nextStepIndex)
       } else {
-        // Guide complete
+        // Done
         const updatedState: ActiveGuideState = {
           ...activeGuide,
           completedSteps: newCompletedSteps,
@@ -222,7 +225,7 @@ export function useGuideSession(options: UseGuideSessionOptions): UseGuideSessio
             [],
             guide.steps.length,
             guide.steps.length,
-            'Guide complete!',
+            'Done',
             guide.title || '',
             undefined, // no captionPosition for completion message
             true
@@ -264,6 +267,7 @@ export function useGuideSession(options: UseGuideSessionOptions): UseGuideSessio
           caption: stepResult.caption,
           instruction: stepResult.instruction,
           points: stepResult.points,
+          captionPosition: stepResult.captionPosition,
           screenshot: screenshotDataUrl,
         }
 
@@ -284,7 +288,7 @@ export function useGuideSession(options: UseGuideSessionOptions): UseGuideSessio
 
         // Add step message with screenshot
         const assistantMessage = createAssistantMessage(
-          `Step ${guide.steps.length + 1}: ${newStep.instruction}`,
+          `**Step ${guide.steps.length + 1}:** ${newStep.instruction}`,
           {
             image: screenshotDataUrl,
             points: newStep.points,
@@ -336,7 +340,7 @@ export function useGuideSession(options: UseGuideSessionOptions): UseGuideSessio
       setActiveGuide(updatedState)
 
       // Add next step message
-      const stepMessage = createAssistantMessage(nextStep.instruction, {
+      const stepMessage = createAssistantMessage(`**Step ${nextStepIndex + 1}:** ${nextStep.instruction}`, {
         variant: 'instruction',
       })
       addMessage(stepMessage)

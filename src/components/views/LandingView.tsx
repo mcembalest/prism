@@ -36,29 +36,34 @@ export function LandingView({
     
     return (
         <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="p-6">
-                <h1 className="text-3xl font-bold text-white text-center mb-2">How can I help?</h1>
-                <p className="text-sm text-zinc-400 text-center">Ask a question or choose a guide</p>
+            <div className="px-8 pt-48 pb-6">
+                <h1 className="text-3xl font-bold text-foreground mb-2">What can I help with?</h1>
+                <p className="text-sm text-muted-foreground">Type a question or choose from existing guides</p>
             </div>
 
             <ScrollArea className="flex-1 h-0">
-                <div ref={scrollRef} className="px-4 py-6 space-y-6 max-w-full overflow-x-hidden">
-                    <div>
-                        <div className="grid grid-cols-2 gap-2">
+                <div ref={scrollRef} className="px-8 pb-6 space-y-6">
+                    <div className="space-y-4">
+                        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Suggested for you
+                        </h2>
+                        <div className="flex flex-wrap gap-2">
                             {topics.map(topic => (
                                 <button
                                     key={topic.id}
                                     onClick={() => onTopicSelect(topic.id)}
-                                    className="flex items-center gap-2 p-2 rounded-full bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 transition-all text-left"
+                                    className="flex items-center gap-2 px-4 py-2 rounded-full bg-muted hover:bg-muted/80 transition-colors text-sm"
                                 >
-                                    <span className="text-zinc-400">{topic.icon}</span>
-                                    <span className="text-xs text-zinc-200">{topic.name}</span>
+                                    <span className="text-muted-foreground text-xs" style={{ fontSize: '0.85em', lineHeight: 1 }}>
+                                        {topic.icon}
+                                    </span>
+                                    <span className="text-foreground">{topic.name}</span>
                                 </button>
                             ))}
                         </div>
                     </div>
 
-                    <MessageList messages={messages} />
+                    {messages.length > 0 && <MessageList messages={messages} />}
                 </div>
             </ScrollArea>
 
