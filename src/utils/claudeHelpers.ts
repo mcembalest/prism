@@ -1,16 +1,6 @@
 import type { Message } from '@/types/guide'
 import type { ClaudeEvent } from '@/services/claude'
 
-/**
- * Format tool name for display
- */
-function formatToolName(toolName: string): string {
-    // Show "Searching" for Grep and Glob
-    if (toolName === 'Grep' || toolName === 'Glob') {
-        return 'Searching'
-    }
-    return toolName
-}
 
 /**
  * Extract relative filepath from tool input

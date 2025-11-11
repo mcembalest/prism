@@ -711,13 +711,13 @@ pub fn run() {
         // Set up window close handler to hide instead of exit
         if let Some(main_window) = app.get_webview_window("main") {
           let window_clone = main_window.clone();
-          let app_handle = app.handle().clone();
           main_window.on_window_event(move |event| {
             match event {
               tauri::WindowEvent::CloseRequested { api, .. } => {
                 // Prevent the window from closing and hide it instead
                 api.prevent_close();
                 let _ = window_clone.hide();
+                
               }
               // Commented out: This was closing overlays immediately when main window lost focus
               // tauri::WindowEvent::Focused(false) => {
