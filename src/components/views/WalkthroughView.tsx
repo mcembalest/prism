@@ -72,6 +72,7 @@ export function WalkthroughView({
                                                 content={message.content}
                                                 role={message.role}
                                                 variant={message.variant}
+                                                filesRead={message.filesRead}
                                             />
                                         </div>
 

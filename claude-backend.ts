@@ -10,6 +10,7 @@
 import express from 'express';
 import cors from 'cors';
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import Anthropic from '@anthropic-ai/sdk';
 
 const app = express();
 const PORT = 3001;
@@ -40,7 +41,8 @@ app.post('/api/claude/query', async (req, res) => {
                 allowedTools: allowedTools || ["Read", "Glob", "Grep"],
                 cwd: cwd || "data/rocketalumni/",
                 resume: sessionId || undefined,
-                systemPrompt: systemPrompt || undefined
+                systemPrompt: systemPrompt || undefined,
+                model: "claude-haiku-4-5-20251001"
             }
         })) {
             // Send each event as SSE
@@ -56,6 +58,55 @@ app.post('/api/claude/query', async (req, res) => {
             error: error instanceof Error ? error.message : String(error)
         })}\n\n`);
         res.end();
+    }
+});
+
+// Simple text completion endpoint for generating search summaries
+app.post('/api/claude/summarize', async (req, res) => {
+    const { query } = req.body;
+
+    if (!query) {
+        res.status(400).json({ error: 'Query is required' });
+        return;
+    }
+
+    try {
+        const apiKey = process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY || '';
+        if (!apiKey) {
+            res.status(500).json({ error: 'No Anthropic API key configured' });
+            return;
+        }
+
+        const anthropic = new Anthropic({
+            apiKey
+        });
+
+        const prompt = `Extract the main topic in 2-4 words. Follow the examples exactly.
+
+Examples:
+"search for pricing info" -> pricing information
+"where is the login page" -> login page
+"tell me about security" -> security details
+
+"${query}" ->`;
+
+        const message = await anthropic.messages.create({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 50,
+            system: "You are a text summarization tool. Respond ONLY with the requested summary, no explanations or additional text.",
+            messages: [{ role: 'user', content: prompt }]
+        });
+
+        const summary = message.content[0].type === 'text'
+            ? message.content[0].text.split('\n')[0].trim()
+            : '';
+
+        res.json({ summary });
+    } catch (error) {
+        console.error('Summarize error:', error);
+        res.status(500).json({
+            error: error instanceof Error ? error.message : String(error)
+        });
     }
 });
 

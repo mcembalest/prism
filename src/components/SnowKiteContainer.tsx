@@ -19,6 +19,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useGuideSession } from '@/hooks/useGuideSession'
 import { createAssistantMessage, createSearchingMessage } from '@/utils/messageHelpers'
 import { convertClaudeEventToMessages, createUserMessage, getRelativeFilePath } from '@/utils/claudeHelpers'
+import { generateSearchSummary } from '@/utils/searchSummary'
 import { EVENTS, TAURI_COMMANDS, TIMING, VIEWS } from '@/utils/constants'
 import type { Message } from '@/types/guide'
 
@@ -221,16 +222,53 @@ export function SnowKiteContainer() {
     const handleClaudeQuery = useCallback(
         async (query: string) => {
             try {
-                // Add delay before showing searching message for professional feel
+                // Initial delay before showing any indicators (avoid flashing for fast responses)
                 await new Promise(resolve => setTimeout(resolve, TIMING.STATUS_DELAY))
 
-                // Show searching message
-                const searchingMessage = createSearchingMessage(query)
-                messages.addMessage(searchingMessage)
+                // Show ellipsis indicator while processing
+                const ellipsisMessage: Message = {
+                    id: `ellipsis-${Date.now()}-${Math.random()}`,
+                    role: 'assistant',
+                    content: '...',
+                    variant: 'assistant',
+                }
+                console.log('[Debug] Creating ellipsis message:', ellipsisMessage.id)
+                console.log('[Debug] Current messages count before adding ellipsis:', messages.messages.length)
+                messages.addMessage(ellipsisMessage)
+                console.log('[Debug] Current messages count after adding ellipsis:', messages.messages.length)
 
                 // Track files read across all events in this query
                 const filesReadInSession: string[] = []
                 let searchingMessageRemoved = false
+                let searchingMessageShown = false
+                let searchingMessage: Message | null = null
+                let ellipsisRemoved = false
+
+                // Search tool names to detect
+                const searchTools = ['Grep', 'Glob', 'WebSearch']
+
+                // Start summary generation in parallel (non-blocking)
+                let searchSummary: string | null = null
+                let searchToolsDetected = false
+                generateSearchSummary(query).then(summary => {
+                    searchSummary = summary
+                    console.log('[Debug] Summary generated:', summary)
+                    // If search tools were already detected, show the searching message now
+                    if (searchToolsDetected && !searchingMessageShown && !searchingMessageRemoved) {
+                        // Remove ellipsis
+                        if (!ellipsisRemoved) {
+                            messages.setMessages(prev => prev.filter(msg => msg.id !== ellipsisMessage.id))
+                            ellipsisRemoved = true
+                        }
+                        // Show searching message with summary
+                        searchingMessage = createSearchingMessage(searchSummary!)
+                        messages.addMessage(searchingMessage)
+                        searchingMessageShown = true
+                    }
+                }).catch(err => {
+                    console.error('Search summary generation failed:', err)
+                    // Continue without summary
+                })
 
                 // Stream Claude responses
                 for await (const event of claudeService.queryStream({
@@ -254,14 +292,47 @@ export function SnowKiteContainer() {
                     if (event.type === 'assistant') {
                         const content = event.message.content || []
 
-                        // Remove searching message when first text content arrives
-                        if (!searchingMessageRemoved) {
-                            const hasTextContent = content.some(item => item.type === 'text' && item.text)
-                            if (hasTextContent) {
-                                messages.setMessages(prev => prev.filter(msg => msg.id !== searchingMessage.id))
-                                searchingMessageRemoved = true
+                        // Check if search tools are being used
+                        if (!searchingMessageShown && !searchToolsDetected) {
+                            const hasSearchTool = content.some(
+                                item => item.type === 'tool_use' && item.name && searchTools.includes(item.name)
+                            )
+
+                            // Debug logging
+                            const toolsUsed = content.filter(item => item.type === 'tool_use').map(item => item.name)
+                            if (toolsUsed.length > 0) {
+                                console.log('[Debug] Tools used:', toolsUsed)
+                                console.log('[Debug] Search tools detected:', hasSearchTool)
+                            }
+
+                            if (hasSearchTool) {
+                                searchToolsDetected = true
+                                console.log('[Debug] Showing searching message')
+                                // If summary is already ready, show searching message now
+                                if (searchSummary) {
+                                    // Remove ellipsis
+                                    if (!ellipsisRemoved) {
+                                        messages.setMessages(prev => prev.filter(msg => msg.id !== ellipsisMessage.id))
+                                        ellipsisRemoved = true
+                                    }
+                                    // Show searching message with summary
+                                    searchingMessage = createSearchingMessage(searchSummary)
+                                    messages.addMessage(searchingMessage)
+                                    searchingMessageShown = true
+                                }
+                                // Otherwise, the summary promise handler will show it when ready
                             }
                         }
+
+                        // Remove ellipsis when first text content arrives (before or during search)
+                        const hasTextContent = content.some(item => item.type === 'text' && item.text)
+                        if (hasTextContent && !ellipsisRemoved) {
+                            console.log('[Debug] Removing ellipsis - text content arrived')
+                            messages.setMessages(prev => prev.filter(msg => msg.id !== ellipsisMessage.id))
+                            ellipsisRemoved = true
+                        }
+
+                        // Don't remove searching message - we'll keep it and add files to it later
 
                         for (const item of content) {
                             if (item.type === 'tool_use' && item.name === 'Read' && item.input) {
@@ -284,6 +355,27 @@ export function SnowKiteContainer() {
                         }
                         messages.addMessage(msg)
                     })
+                }
+
+                // Clean up any remaining indicators
+                console.log('[Debug] Final cleanup - ellipsisRemoved:', ellipsisRemoved, 'filesReadInSession:', filesReadInSession.length)
+                if (!ellipsisRemoved) {
+                    console.log('[Debug] Cleaning up remaining ellipsis in final cleanup')
+                    messages.setMessages(prev => prev.filter(msg => msg.id !== ellipsisMessage.id))
+                }
+
+                // Update searching message with collected files (keep it visible with dropdown)
+                if (searchingMessageShown && searchingMessage && filesReadInSession.length > 0) {
+                    console.log('[Debug] Updating searching message with', filesReadInSession.length, 'files:', filesReadInSession)
+                    messages.setMessages(prev =>
+                        prev.map(msg => {
+                            if (msg.id === searchingMessage!.id) {
+                                console.log('[Debug] Updated message:', { ...msg, filesRead: [...filesReadInSession] })
+                                return { ...msg, filesRead: [...filesReadInSession] }
+                            }
+                            return msg
+                        })
+                    )
                 }
             } catch (error) {
                 console.error('Claude query error:', error)

@@ -3,7 +3,8 @@
  * Communicates with the Claude backend service via HTTP/SSE
  */
 
-const CLAUDE_BACKEND_URL = 'http://localhost:3001';
+// Modal production endpoint for Claude queries
+const CLAUDE_BACKEND_URL = 'https://max-80448--rocket-alumni-backend-query-endpoint.modal.run';
 
 /**
  * Claude event types that we'll receive from the streaming API
@@ -91,15 +92,15 @@ export class ClaudeService {
      */
     async *queryStream(options: ClaudeQueryOptions): AsyncGenerator<ClaudeEvent> {
         try {
-            const response = await fetch(`${CLAUDE_BACKEND_URL}/api/claude/query`, {
+            const response = await fetch(CLAUDE_BACKEND_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
                     prompt: options.prompt,
-                    cwd: options.cwd || "data/rocketalumni/",
-                    allowedTools: options.allowedTools || ["Read", "Glob", "Grep"],
+                    cwd: options.cwd,
+                    allowedTools: options.allowedTools,
                     sessionId: options.sessionId,
                     systemPrompt: options.systemPrompt
                 })
@@ -137,7 +138,10 @@ export class ClaudeService {
 
                         try {
                             const event = JSON.parse(data) as ClaudeEvent;
-                            
+
+                            // Debug: Log received events from Modal
+                            console.log('[Claude Service] Received event:', event);
+
                             // Store session ID from first message
                             if ('session_id' in event && event.session_id && !this.sessionId) {
                                 this.sessionId = event.session_id;

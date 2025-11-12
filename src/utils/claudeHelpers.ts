@@ -30,6 +30,9 @@ export function convertClaudeEventToMessages(event: ClaudeEvent): Message[] {
     if (event.type === 'assistant') {
         const content = event.message.content || []
 
+        // Debug: Log content items to verify type field
+        console.log('[claudeHelpers] Content items:', content)
+
         for (const item of content) {
             // Text response from Claude
             if (item.type === 'text' && item.text) {
