@@ -4,8 +4,8 @@
  */
 
 // Modal production endpoint for Claude queries
-// const CLAUDE_BACKEND_URL = 'http://localhost:3001/api/claude/query';
-const CLAUDE_BACKEND_URL = 'https://max-80448--rocket-alumni-backend-query-endpoint.modal.run';
+const CLAUDE_BACKEND_URL = 'http://localhost:3001/api/claude/query';
+// const CLAUDE_BACKEND_URL = 'https://max-80448--rocket-alumni-backend-query-endpoint.modal.run';
 
 /**
  * Claude event types that we'll receive from the streaming API
