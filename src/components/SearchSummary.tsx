@@ -16,6 +16,12 @@ export function SearchSummary({
     ? `Searched ${query}`
     : `Searched ${files.length} file${files.length === 1 ? '' : 's'}`
 
+  // Helper function to extract filename without path and .md extension
+  const getDisplayName = (filePath: string) => {
+    const fileName = filePath.split('/').pop() || filePath
+    return fileName.replace(/\.md$/, '')
+  }
+
   return (
     <div className="text-xs text-muted-foreground mb-2">
       <button
@@ -39,7 +45,7 @@ export function SearchSummary({
         <ul className="ml-6 mt-1 space-y-0.5 text-xs">
           {files.map((file, index) => (
             <li key={index} className="font-mono opacity-70">
-              {file}
+              {getDisplayName(file)}
             </li>
           ))}
         </ul>

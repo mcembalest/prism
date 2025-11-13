@@ -194,7 +194,7 @@ async def query_endpoint(request: dict):
                 })
             }
 
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(event_generator(), ping=15)
 
 
 @app.function(image=image)

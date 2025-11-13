@@ -30,9 +30,9 @@ function applyTheme(theme: Theme) {
 function getStoredTheme(): Theme {
   try {
     const stored = localStorage.getItem(STORAGE_KEY) as Theme | null
-    return stored === 'light' || stored === 'dark' ? stored : 'dark'
+    return stored === 'light' || stored === 'dark' ? stored : 'light'
   } catch {
-    return 'dark'
+    return 'light'
   }
 }
 
