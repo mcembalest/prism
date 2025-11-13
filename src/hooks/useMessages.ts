@@ -1,0 +1,78 @@
+/**
+ * Messages hook
+ * Manages chat message state and input
+ * Following React principles: minimal state, clear actions
+ */
+
+import { useState, useCallback } from 'react'
+import type { Message } from '@/types/guide'
+
+export interface UseMessagesReturn {
+  // State
+  messages: Message[]
+  input: string
+  isProcessing: boolean
+  messageHistory: Message[][]
+
+  // Actions
+  setInput: (value: string) => void
+  addMessage: (message: Message) => void
+  addMessages: (newMessages: Message[]) => void
+  clearMessages: () => void
+  resetChat: () => void
+  setIsProcessing: (processing: boolean) => void
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>
+}
+
+/**
+ * Hook for managing chat messages and input
+ *
+ * @example
+ * const { messages, input, setInput, addMessage } = useMessages()
+ */
+export function useMessages(): UseMessagesReturn {
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState('')
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [messageHistory, setMessageHistory] = useState<Message[][]>([])
+
+  // Add a single message (memoized)
+  const addMessage = useCallback((message: Message) => {
+    setMessages(prev => [...prev, message])
+  }, [])
+
+  // Add multiple messages at once
+  const addMessages = useCallback((newMessages: Message[]) => {
+    setMessages(prev => [...prev, ...newMessages])
+  }, [])
+
+  // Clear all messages
+  const clearMessages = useCallback(() => {
+    setMessages([])
+    setInput('')
+  }, [])
+
+  // Reset chat and save current messages to history
+  const resetChat = useCallback(() => {
+    if (messages.length > 0) {
+      setMessageHistory(prev => [...prev, messages])
+    }
+    setMessages([])
+    setInput('')
+    setIsProcessing(false)
+  }, [messages])
+
+  return {
+    messages,
+    input,
+    isProcessing,
+    messageHistory,
+    setInput,
+    addMessage,
+    addMessages,
+    clearMessages,
+    resetChat,
+    setIsProcessing,
+    setMessages,
+  }
+}

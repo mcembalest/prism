@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SnowKite</title>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        
+        const mermaidConfig = {
+            startOnLoad: true,
+            theme: 'base',
+            themeVariables: {
+                primaryColor: '#4F46E5',
+                primaryTextColor: '#111827',
+                primaryBorderColor: '#4338CA',
+                lineColor: '#6366F1',
+                secondaryColor: '#F3F4F6',
+                tertiaryColor: '#E0E7FF',
+                background: '#ffffff',
+                mainBkg: '#EEF2FF',
+                secondBkg: '#F3F4F6',
+                edgeLabelBackground: '#ffffff',
+                actorBorder: '#4F46E5',
+                actorBkg: '#EEF2FF',
+                actorTextColor: '#111827',
+                actorLineColor: '#6366F1',
+                signalColor: '#1F2937',
+                signalTextColor: '#111827',
+                labelBoxBkgColor: '#EEF2FF',
+                labelBoxBorderColor: '#4F46E5',
+                labelTextColor: '#111827',
+                loopTextColor: '#111827',
+                noteBorderColor: '#4F46E5',
+                noteBkgColor: '#FEF3C7',
+                noteTextColor: '#92400E',
+                activationBorderColor: '#4F46E5',
+                activationBkgColor: '#EEF2FF',
+                sequenceNumberColor: '#111827',
+                fontSize: '14px',
+                fontFamily: 'Inter, system-ui, -apple-system, sans-serif'
+            },
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis',
+                padding: 16,
+                nodeSpacing: 30,
+                rankSpacing: 40
+            },
+            sequence: {
+                diagramMarginX: 20,
+                diagramMarginY: 20,
+                actorMargin: 70,
+                width: 150,
+                height: 56,
+                boxMargin: 10,
+                boxTextMargin: 5,
+                noteMargin: 10,
+                messageMargin: 30,
+                mirrorActors: true,
+                useMaxWidth: true
+            }
+        };
+        
+        mermaid.initialize(mermaidConfig);
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(180deg, #ffffff 0%, #F7FAFC 100%);
+            min-height: 100vh;
+            padding: 60px 40px;
+            color: #111827;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: #111827;
+            margin-bottom: 50px;
+        }
+        
+        .header h1 {
+            font-size: 3em;
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+        }
+        
+        .header p {
+            font-size: 1.3em;
+            font-weight: 300;
+            opacity: 0.95;
+        }
+        
+        .top-diagram {
+            margin-bottom: 24px;
+        }
+        
+        .top-diagram .diagram-content {
+            height: 350px;
+        }
+        
+        .diagrams-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); /* Flowchart left, Sequence right */
+            gap: 24px;
+            align-items: start;
+        }
+        
+        .diagram-card {
+            position: relative;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        .diagram-header {
+            background: linear-gradient(135deg, #F8FAFC 0%, #EEF2FF 100%);
+            padding: 20px 32px;
+            color: #111827;
+        }
+        
+        .diagram-header h2 {
+            font-size: 1.8em;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .diagram-header p {
+            font-size: 1em;
+            font-weight: 300;
+            opacity: 0.9;
+        }
+        
+        .diagram-content {
+            padding: 32px 32px;
+            background: #FAFAFA;
+            overflow-x: hidden;
+            overflow-y: auto;
+            height: 1000px; /* equalized height for both diagrams */
+        }
+        
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            height: 100%;
+        }
+        .mermaid svg {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            max-height: 100% !important;
+        }
+        
+        /* Custom Mermaid styling */
+        .mermaid .node rect,
+        .mermaid .node circle,
+        .mermaid .node polygon {
+            stroke-width: 2px;
+        }
+        
+        .mermaid .edgeLabel {
+            background-color: white !important;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .mermaid .messageText {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .mermaid .actor {
+            stroke-width: 2px;
+        }
+        
+        /* Top diagram specific styles */
+        .top-diagram .mermaid .edgeLabel {
+            font-size: 5px !important;
+            border: 2px solid #4F46E5 !important;
+            border-radius: 20px !important;
+            background-color: white !important;
+            padding: 6px 2px !important;
+        }
+        
+        @media (max-width: 1100px) {
+            .diagrams-grid {
+                grid-template-columns: 1fr;
+            }
+            .diagram-content {
+                height: auto;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .header p {
+                font-size: 1em;
+            }
+            
+            .diagram-header {
+                padding: 20px 30px;
+            }
+            
+            .diagram-content {
+                padding: 30px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>SnowKite</h1>
+            <h2>The expert agent in your product</h2>
+        </div>
+        
+        <!-- Top Diagram: Positioning -->
+        <div class="top-diagram">
+            <div class="diagram-card">
+                <div class="diagram-header">
+                    <h2>Where SnowKite sits relative to your product</h2>
+                </div>
+                <div class="diagram-content">
+                    <div class="mermaid">
+flowchart LR
+    User[User]
+    Prod[Product]
+    HL[SnowKite]
+    KB[(Product<br/>Knowledge)]
+    
+    User -->|uses| Prod
+    Prod -.->|optionally emits events to| HL
+    HL -->|Observes UI/DOM of| Prod
+    HL -->|queries| KB
+    HL -->|provides help to| User
+    
+    style HL fill:#EEF2FF,stroke:#4F46E5,stroke-width:3px
+    style Prod fill:#F9FAFB,stroke:#9CA3AF,stroke-width:2px
+    style KB fill:#FEF3C7,stroke:#F59E0B,stroke-width:2px
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="diagrams-grid">
+            <!-- Flowchart -->
+            <div class="diagram-card">
+                <div class="diagram-header">
+                    <h2>User Journey of requesting to receiving help</h2>
+                </div>
+                <div class="diagram-content">
+                    <div class="mermaid">
+flowchart TD
+    Start([User requests help]) --> Open[SnowKite opens]
+    
+    Open --> Choice{User action}
+    Choice -->|Asks a question| Question[Answer contextually]
+    Choice -->|Searches for guide| Guide[Start step-by-step guide]
+    
+    Question --> OfferGuide{Want a guide?}
+    OfferGuide -->|Yes| Guide
+    OfferGuide -->|No| Done([Close])
+    
+    Guide --> DisplayStep[Display Step]
+    DisplayStep --> Monitor[Monitor for checkpoint completion]
+    
+    Monitor --> Check{Checkpoint<br/>reached?}
+    Check -->|Yes ✓| Next{More steps?}
+    Check -->|No| UserAction{User action}
+    
+    UserAction -->|Skip step| SkipCheck{Skip feasible?}
+    UserAction -->|Keep trying| Monitor
+    
+    SkipCheck -->|Yes| Next
+    SkipCheck -->|No| Monitor
+    
+    Next -->|Yes| DisplayStep
+    Next -->|No| Done
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Sequence Diagram -->
+            <div class="diagram-card">
+                <div class="diagram-header">
+                    <h2>Sequence of SnowKite system interactions</h2>
+                </div>
+                <div class="diagram-content">
+                    <div class="mermaid">
+sequenceDiagram
+    actor U as User
+    participant P as Product
+    participant HL as SnowKite
+    participant KB as Knowledge Base
+
+    U->>P: Working in product
+    U->>HL: Request help
+    Note over HL,P: SnowKite observes current context
+    HL->>U: SnowKite opens
+    
+    alt User asks question
+        U->>HL: Type question
+        HL->>KB: Query for contextual answer
+        KB-->>HL: Return answer
+        HL->>U: Display answer & offer guide
+        opt User accepts guide
+            U->>HL: Accept guide offer
+        end
+    else User searches for guide
+        U->>HL: Search for guide
+    end
+    
+    opt Guide selected (from either path)
+        HL->>KB: Fetch guide steps
+        KB-->>HL: Return step-by-step guide
+        
+        loop Each Step
+            HL->>U: Display step instructions
+            U->>P: Perform action in product
+            Note over HL,P: SnowKite observes Product UI/DOM
+            
+            alt Checkpoint reached
+                HL->>P: Check UI/DOM state or receive event
+                P-->>HL: Checkpoint confirmed
+                HL->>U: Show completion ✓
+            else User skips step
+                U->>HL: Request skip step
+                HL->>KB: Check if skip allowed
+                KB-->>HL: Skip feasibility
+                alt Skip allowed
+                    HL->>U: Advance to next step
+                else Must complete
+                    HL->>U: Must complete this step
+                    Note over U,HL: Continue monitoring
+                end
+            end
+        end
+        
+        HL->>U: Done
+    end
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,7 +1,7 @@
 [package]
-name = "Prism"
+name = "SnowKite"
 version = "0.1.0"
-description = "Prism"
+description = "SnowKite"
 authors = ["Max Cembalest"]
 license = ""
 repository = ""
@@ -17,9 +17,10 @@ tauri-build = { version = "2.4.1", features = [] }
 
 [dependencies]
 log = "0.4"
-tauri = { version = "2.8.5", features = ["macos-private-api"] }
+tauri = { version = "2.8.5", features = ["tray-icon", "macos-private-api"] }
 tauri-plugin-log = "2"
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-decorum = "1"
 screenshots = "0.8.10"
 base64 = "0.22.1"
 tokio = { version = "1", features = ["time"] }

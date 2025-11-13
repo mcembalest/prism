@@ -1,0 +1,1 @@
+Profiles can be ordered alphabetically by First Name, Last Name, Sport, or a custom text field. They can also be ordered numerically by Year or a custom date field.

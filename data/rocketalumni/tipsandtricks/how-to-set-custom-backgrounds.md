@@ -1,0 +1,1 @@
+1. Email support@rocketalumnisolutions.com for custom graphics. Please send high quality full-body action shots that we can transform into a collage or cut out specific pictures

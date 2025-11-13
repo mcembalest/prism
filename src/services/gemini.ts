@@ -7,7 +7,7 @@ import type {
   WalkthroughResult,
   WalkthroughStepResult,
   IntentType
-} from '@/types/walkthrough'
+} from '@/types/guide'
 
 type GeminiPart =
   | { text: string }
@@ -38,7 +38,7 @@ function dataUrlToInlineData(dataUrl: string): { mimeType: string; data: string 
 
 function getGeminiApiKey(): string {
   try {
-    return localStorage.getItem('prism_gemini_api_key') || ''
+    return localStorage.getItem('SnowKite_gemini_api_key') || ''
   } catch {
     return ''
   }
@@ -273,7 +273,8 @@ class GeminiService {
   async walkthroughNextStep(
     imageDataUrl: string,
     goal: string,
-    previousSteps: string[]
+    previousSteps: string[],
+    appContext?: string
   ): Promise<WalkthroughStepResult> {
     const inline = dataUrlToInlineData(imageDataUrl)
 
@@ -282,8 +283,12 @@ class GeminiService {
       ? `Previous steps completed:\n${previousSteps.map((step, i) => `${i + 1}. ${step}`).join('\n')}\n\n`
       : ''
 
+    // Add app context if provided
+    const appContextText = appContext ? `${appContext}\n\n` : ''
+
     const prompt = [
       'You are helping a user achieve a goal through a step-by-step walkthrough.',
+      appContextText,
       `User\'s goal: ${goal}`,
       '',
       contextText,
@@ -300,10 +305,19 @@ class GeminiService {
       '   - Use "boxes" ONLY for regions/areas to highlight (text fields, panels, sections)',
       '4. "points": array of center points {x, y} normalized 0.0-1.0 OR empty array []',
       '5. "boxes": array of bounding boxes {xMin, yMin, xMax, yMax} normalized 0.0-1.0 OR empty array []',
-      '6. "isComplete": boolean - true if the goal is fully achieved, false otherwise',
+      '6. "captionPosition": (optional) where to position the caption relative to the cursor. Choose based on cursor location to avoid overlap with UI elements:',
+      '   - "up-left" or "up" or "up-right" when cursor is in bottom portion of screen',
+      '   - "down-left" or "down" or "down-right" when cursor is in top portion of screen (default)',
+      '   - "left" when cursor is on right side',
+      '   - "right" when cursor is on left side',
+      '   If not specified, defaults to "down-right"',
+      '7. "isComplete": boolean - true if the goal is fully achieved, false otherwise',
       '',
-      'Example for clickable element:',
-      '{"caption": "File Menu", "instruction": "Click the File menu in the top-left corner", "points": [{"x": 0.05, "y": 0.03}], "boxes": [], "isComplete": false}',
+      'Example for clickable element in top-left (caption should go down-right):',
+      '{"caption": "File Menu", "instruction": "Click the File menu in the top-left corner", "points": [{"x": 0.05, "y": 0.03}], "boxes": [], "captionPosition": "down-right", "isComplete": false}',
+      '',
+      'Example for clickable element in bottom-right (caption should go up-left):',
+      '{"caption": "Settings", "instruction": "Click the settings button", "points": [{"x": 0.95, "y": 0.95}], "boxes": [], "captionPosition": "up-left", "isComplete": false}',
       '',
       'Example for region/area:',
       '{"caption": "Search Field", "instruction": "Type your query in the search field", "points": [], "boxes": [{"xMin": 0.3, "yMin": 0.1, "xMax": 0.7, "yMax": 0.15}], "isComplete": false}',
@@ -325,6 +339,7 @@ class GeminiService {
       instruction?: string
       points?: Array<{ x?: number; y?: number }>
       boxes?: Array<{ xMin?: number; yMin?: number; xMax?: number; yMax?: number }>
+      captionPosition?: string
       isComplete?: boolean
     }>(jsonText)
 
@@ -333,7 +348,7 @@ class GeminiService {
         caption: 'Error',
         instruction: 'Unable to determine the next step.',
         points: [],
-        boxes: [],
+        captionPosition: undefined,
         isComplete: false
       }
     }
@@ -370,11 +385,17 @@ class GeminiService {
       }
     }
 
+    // Validate and include captionPosition if provided
+    const validPositions = ['up', 'up-right', 'right', 'down-right', 'down', 'down-left', 'left', 'up-left']
+    const captionPosition = parsed.captionPosition && validPositions.includes(parsed.captionPosition)
+      ? parsed.captionPosition as any
+      : undefined
+
     return {
       caption: parsed.caption || 'Step',
       instruction: parsed.instruction,
       points,
-      boxes,
+      captionPosition,
       isComplete: parsed.isComplete ?? false
     }
   }

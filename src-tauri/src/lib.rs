@@ -2,8 +2,11 @@ use screenshots::Screen;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_decorum::WebviewWindowExt;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
+use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState, TrayIcon};
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
 
 // Focused Window State Management
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -17,6 +20,7 @@ struct FocusedWindowInfo {
 struct AppState {
     focused_window: Mutex<Option<FocusedWindowInfo>>,
     selection_mode: Mutex<bool>,
+    tray_icon: Mutex<Option<TrayIcon>>,
 }
 
 impl AppState {
@@ -24,6 +28,7 @@ impl AppState {
         Self {
             focused_window: Mutex::new(None),
             selection_mode: Mutex::new(false),
+            tray_icon: Mutex::new(None),
         }
     }
 
@@ -82,13 +87,14 @@ async fn wait_for_window_ready(window: &WebviewWindow, event_name: &str) {
 #[derive(Clone, Serialize)]
 struct OverlayPayload {
     points: Vec<Point>,
-    boxes: Vec<BoundingBox>,
     #[serde(rename = "walkthroughSteps")]
     walkthrough_steps: Option<u32>,
     #[serde(rename = "currentStep")]
     current_step: Option<u32>,
     instruction: Option<String>,
     caption: Option<String>,
+    #[serde(rename = "captionPosition")]
+    caption_position: Option<String>,
     #[serde(rename = "isComplete")]
     is_complete: Option<bool>,
 }
@@ -160,7 +166,7 @@ async fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
         "settings",
         WebviewUrl::App("settings.html".into())
     )
-    .title("Prism Settings")
+    .title("SnowKite Settings")
     .inner_size(560.0, 420.0)
     .resizable(true)
     .decorations(false)
@@ -178,11 +184,11 @@ async fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
 async fn open_screen_overlay(
     app: tauri::AppHandle,
     points: Vec<Point>,
-    boxes: Vec<BoundingBox>,
     walkthrough_steps: Option<u32>,
     current_step: Option<u32>,
     instruction: Option<String>,
     caption: Option<String>,
+    caption_position: Option<String>,
     is_complete: Option<bool>,
 ) -> Result<(), String> {
 
@@ -213,27 +219,36 @@ async fn open_screen_overlay(
     .decorations(false)
     .transparent(true)
     .always_on_top(true)
+    .visible(false) // Start hidden to prevent flash
     .build()
     .map_err(|e| e.to_string())?;
 
     // Make window click-through (ignore cursor events)
     let _ = window.set_ignore_cursor_events(true);
 
+    // Set window level above popup menus (macOS only)
+    #[cfg(target_os = "macos")]
+    {
+        let _ = window.set_window_level(102);
+    }
+
     let payload = OverlayPayload {
         points,
-        boxes,
         walkthrough_steps,
         current_step,
         instruction,
         caption,
+        caption_position,
         is_complete,
     };
 
-    // Wait for window to be ready, then send data
+    // Wait for window to be ready, then send data and show
     let window_clone = window.clone();
     tokio::spawn(async move {
         wait_for_window_ready(&window_clone, "overlay-ready").await;
         let _ = window_clone.emit("overlay-data", payload);
+        // Show window after data is loaded to prevent flash/artifacts
+        let _ = window_clone.show();
     });
 
     Ok(())
@@ -243,21 +258,21 @@ async fn open_screen_overlay(
 async fn update_screen_overlay_data(
     app: tauri::AppHandle,
     points: Vec<Point>,
-    boxes: Vec<BoundingBox>,
     walkthrough_steps: Option<u32>,
     current_step: Option<u32>,
     instruction: Option<String>,
     caption: Option<String>,
+    caption_position: Option<String>,
     is_complete: Option<bool>,
 ) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("screen-overlay") {
         let payload = OverlayPayload {
             points,
-            boxes,
             walkthrough_steps,
             current_step,
             instruction,
             caption,
+            caption_position,
             is_complete,
         };
         window.emit("overlay-data", payload)
@@ -292,7 +307,7 @@ mod window_management {
 
         if !permission_check.status.success() {
             let error_msg = String::from_utf8_lossy(&permission_check.stderr);
-            return Err(format!("Accessibility permissions required. Please grant Prism access in System Settings → Privacy & Security → Accessibility. Error: {}", error_msg));
+            return Err(format!("Accessibility permissions required. Please grant SnowKite access in System Settings → Privacy & Security → Accessibility. Error: {}", error_msg));
         }
 
         // Use AppleScript to get window list - iterate through ALL windows for each process
@@ -302,7 +317,7 @@ mod window_management {
                 set allProcesses to every process whose background only is false
                 repeat with proc in allProcesses
                     set procName to name of proc
-                    if procName is not "Prism" then
+                    if procName is not "SnowKite" then
                         set procID to unix id of proc
                         set winList to windows of proc
                         if (count of winList) > 0 then
@@ -330,7 +345,7 @@ mod window_management {
 
         let stderr = String::from_utf8_lossy(&output.stderr);
         if !stderr.is_empty() {
-            println!("[Prism] AppleScript stderr: {:?}", stderr);
+            println!("[SnowKite] AppleScript stderr: {:?}", stderr);
         }
 
         if !output.status.success() {
@@ -338,7 +353,7 @@ mod window_management {
         }
 
         let result = String::from_utf8_lossy(&output.stdout);
-        println!("[Prism] AppleScript output: {:?}", result);
+        println!("[SnowKite] AppleScript output: {:?}", result);
 
         // Parse the AppleScript result - format is: app1|window1|pid1|winID1\napp2|window2|pid2|winID2\n...
         let mut windows = Vec::new();
@@ -356,7 +371,7 @@ mod window_management {
                 let process_id = parts[2].trim().parse::<i32>().unwrap_or(0);
                 let window_id = parts[3].trim().parse::<i64>().unwrap_or(0);
 
-                println!("[Prism] Found window: {} - {} (PID: {}, WinID: {})", owner_name, window_name, process_id, window_id);
+                println!("[SnowKite] Found window: {} - {} (PID: {}, WinID: {})", owner_name, window_name, process_id, window_id);
 
                 windows.push(FocusedWindowInfo {
                     owner_name,
@@ -367,15 +382,15 @@ mod window_management {
             }
         }
 
-        println!("[Prism] Total windows found: {}", windows.len());
+        println!("[SnowKite] Total windows found: {}", windows.len());
         Ok(windows)
     }
 
     pub fn arrange_windows(
         focused_window: &FocusedWindowInfo,
-        _prism_window: &WebviewWindow
+        _snowkite_window: &WebviewWindow
     ) -> Result<(), String> {
-        println!("[Prism] Starting window arrangement for: {}", focused_window.owner_name);
+        println!("[SnowKite] Starting window arrangement for: {}", focused_window.owner_name);
 
         // Get screen dimensions
         let screens = Screen::all().map_err(|e| e.to_string())?;
@@ -384,19 +399,19 @@ mod window_management {
         let screen_width = screen.display_info.width as f64;
         let screen_height = screen.display_info.height as f64;
 
-        println!("[Prism] Screen dimensions: {}x{}", screen_width, screen_height);
+        println!("[SnowKite] Screen dimensions: {}x{}", screen_width, screen_height);
 
         // Calculate dimensions
         let focused_width = screen_width * 0.75;
-        let prism_width = screen_width * 0.25;
+        let snowkite_width = screen_width * 0.25;
 
-        println!("[Prism] Resizing Prism window to {}x{} at position ({}, 0)", prism_width, screen_height, focused_width);
+        println!("[SnowKite] Resizing SnowKite window to {}x{} at position ({}, 0)", snowkite_width, screen_height, focused_width);
 
-        // Use AppleScript to move Prism window (same approach that works for Chrome/Cursor)
-        let prism_script = format!(
+        // Use AppleScript to move SnowKite window (same approach that works for Chrome/Cursor)
+        let snowkite_script = format!(
             r#"
             tell application "System Events"
-                tell process "Prism"
+                tell process "SnowKite"
                     tell window 1
                         set position to {{{}, 0}}
                         set size to {{{}, {}}}
@@ -405,27 +420,27 @@ mod window_management {
             end tell
             "#,
             focused_width as i32,
-            prism_width as i32,
+            snowkite_width as i32,
             screen_height as i32
         );
 
-        let prism_output = std::process::Command::new("osascript")
+        let snowkite_output = std::process::Command::new("osascript")
             .arg("-e")
-            .arg(&prism_script)
+            .arg(&snowkite_script)
             .output()
-            .map_err(|e| format!("Failed to execute AppleScript for Prism: {}", e))?;
+            .map_err(|e| format!("Failed to execute AppleScript for SnowKite: {}", e))?;
 
-        if !prism_output.status.success() {
-            let error = String::from_utf8_lossy(&prism_output.stderr);
-            println!("[Prism] AppleScript error for Prism window: {}", error);
+        if !snowkite_output.status.success() {
+            let error = String::from_utf8_lossy(&snowkite_output.stderr);
+            println!("[SnowKite] AppleScript error for SnowKite window: {}", error);
         } else {
-            println!("[Prism] Prism window repositioned via AppleScript");
+            println!("[SnowKite] SnowKite window repositioned via AppleScript");
         }
 
         // Position focused window (left 3/4)
         // Calculate window index from window_id (format: process_id * 1000 + window_index)
         let window_index = ((focused_window.window_id % 1000) as i32).max(1);
-        println!("[Prism] Positioning {} window #{} to {}x{}", focused_window.owner_name, window_index, focused_width as i32, screen_height as i32);
+        println!("[SnowKite] Positioning {} window #{} to {}x{}", focused_window.owner_name, window_index, focused_width as i32, screen_height as i32);
 
         let script = format!(
             r#"
@@ -453,11 +468,11 @@ mod window_management {
 
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr);
-            println!("[Prism] AppleScript error: {}", error);
+            println!("[SnowKite] AppleScript error: {}", error);
             return Err(format!("Failed to position window: {}", error));
         }
 
-        println!("[Prism] Window arrangement completed successfully");
+        println!("[SnowKite] Window arrangement completed successfully");
         Ok(())
     }
 }
@@ -475,10 +490,10 @@ async fn arrange_windows(
     state: tauri::State<'_, AppState>,
     window_info: FocusedWindowInfo
 ) -> Result<(), String> {
-    let prism_window = app.get_webview_window("main")
-        .ok_or("Could not find Prism main window")?;
+    let snowkite_window = app.get_webview_window("main")
+        .ok_or("Could not find SnowKite main window")?;
 
-    window_management::arrange_windows(&window_info, &prism_window)?;
+    window_management::arrange_windows(&window_info, &snowkite_window)?;
 
     // Save to state and disk
     *state.focused_window.lock().unwrap() = Some(window_info.clone());
@@ -517,6 +532,41 @@ async fn get_focused_window(state: tauri::State<'_, AppState>) -> Result<Option<
     Ok(state.focused_window.lock().unwrap().clone())
 }
 
+#[tauri::command]
+async fn show_main_window(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+        
+        // If there's a saved focused window, automatically arrange windows
+        #[cfg(target_os = "macos")]
+        {
+            let focused_window = state.focused_window.lock().unwrap().clone();
+            if let Some(window_info) = focused_window {
+                println!("[SnowKite] Auto-arranging with saved window: {:?}", window_info);
+                // Try to arrange windows, but don't fail if it doesn't work
+                // (e.g., if the window no longer exists)
+                if let Err(e) = window_management::arrange_windows(&window_info, &window) {
+                    println!("[SnowKite] Failed to auto-arrange: {}", e);
+                    // Clear the saved state since the window probably doesn't exist anymore
+                    *state.focused_window.lock().unwrap() = None;
+                    // Optionally delete from disk
+                    let _ = std::fs::remove_file(
+                        app.path().app_data_dir()
+                            .ok()
+                            .map(|d| d.join("focus_state.json"))
+                            .unwrap_or_default()
+                    );
+                }
+            }
+        }
+        
+        Ok(())
+    } else {
+        Err("Main window not found".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -533,9 +583,14 @@ pub fn run() {
       start_focus_selection_mode,
       stop_focus_selection_mode,
       get_focus_selection_mode,
-      get_focused_window
+      get_focused_window,
+      show_main_window
     ])
     .setup(|app| {
+      // Hide Dock icon on macOS
+      #[cfg(target_os = "macos")]
+      app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
@@ -551,14 +606,17 @@ pub fn run() {
           let _ = handle.emit("proceed-shortcut-triggered", ());
         }
       })?;
+      
       #[cfg(target_os = "macos")]
       {
-        use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+        use tauri::menu::SubmenuBuilder;
+        
+        // Create application menu (for when app is visible)
         let settings = MenuItemBuilder::new("Settings…")
           .id("settings")
           .accelerator("Cmd+,")
           .build(app)?;
-        let app_menu = SubmenuBuilder::new(app, "Prism")
+        let app_menu = SubmenuBuilder::new(app, "SnowKite")
           .item(&settings)
           .build()?;
         let menu = MenuBuilder::new(app)
@@ -575,40 +633,104 @@ pub fn run() {
             });
           }
         });
-      }
 
-      // Auto-arrangement on startup
-      #[cfg(target_os = "macos")]
-      {
+        // ========== TRAY ICON INITIALIZATION WITH DIAGNOSTICS ==========
+        println!("[SnowKite] ====== System Information ======");
+        println!("[SnowKite] macOS version: {:?}", std::env::var("OSTYPE").unwrap_or_else(|_| "unknown".to_string()));
+        println!("[SnowKite] Architecture: {}", std::env::consts::ARCH);
+        println!("[SnowKite] OS: {}", std::env::consts::OS);
+        println!("[SnowKite] ================================");
+
+        println!("[SnowKite] Attempting to create system tray icon...");
+
+        // Try to get the default window icon with detailed logging
+        let icon_result = app.default_window_icon();
+        let icon = match icon_result {
+            Some(icon) => {
+                println!("[SnowKite] ✓ Default window icon loaded successfully");
+                icon.clone()
+            }
+            None => {
+                eprintln!("[SnowKite] ✗ ERROR: Default window icon not available");
+                eprintln!("[SnowKite] ✗ ERROR: Cannot create tray icon without an icon");
+                eprintln!("[SnowKite] ✗ This usually means:");
+                eprintln!("[SnowKite]   - Icon files are missing from the bundle");
+                eprintln!("[SnowKite]   - Icon files are corrupted");
+                eprintln!("[SnowKite]   - The app bundle was not built correctly");
+                eprintln!("[SnowKite] ✗ Please rebuild the app with: cargo build --release");
+                return Err("Failed to load tray icon: no default window icon available".into());
+            }
+        };
+
+        // Build tray icon with error handling
+        println!("[SnowKite] Building tray icon...");
+        let tray_result = TrayIconBuilder::new()
+          .icon(icon)
+          .icon_as_template(true)
+          .tooltip("SnowKite")
+          .on_tray_icon_event(|tray, event| {
+            if let tauri::tray::TrayIconEvent::Click {
+              button: MouseButton::Left,
+              button_state: MouseButtonState::Up,
+              ..
+            } = event {
+              let app_handle = tray.app_handle().clone();
+              tauri::async_runtime::spawn(async move {
+                let state = app_handle.state::<AppState>();
+                let app_clone = app_handle.clone();
+                let _ = show_main_window(app_clone, state).await;
+              });
+            }
+          })
+          .build(app);
+
+        match tray_result {
+            Ok(tray) => {
+                // Keep tray icon alive for the lifetime of the app
+                let state = app.state::<AppState>();
+                *state.tray_icon.lock().unwrap() = Some(tray);
+                println!("[SnowKite] ✓ System tray icon created successfully!");
+                println!("[SnowKite] ✓ App should be visible in menu bar");
+            }
+            Err(e) => {
+                eprintln!("[SnowKite] ✗ ERROR: Failed to create tray icon: {:?}", e);
+                eprintln!("[SnowKite] ✗ The app will be invisible without a tray icon!");
+                return Err(format!("Failed to build tray icon: {:?}", e).into());
+            }
+        }
+        println!("[SnowKite] ========================================");
+
+        // Load saved window state but don't auto-arrange
         let app_handle = app.handle().clone();
         let state = app.state::<AppState>();
-
-        // Try to load saved focus window
         if let Some(saved_window) = AppState::load_from_disk(&app_handle) {
-          println!("[Prism] Found saved window: {:?}", saved_window);
+          println!("[SnowKite] Found saved window: {:?}", saved_window);
           *state.focused_window.lock().unwrap() = Some(saved_window.clone());
+        }
 
-          // Try to arrange windows on startup
-          let prism_window_result = app_handle.get_webview_window("main");
-          if let Some(prism_window) = prism_window_result {
-            // Small delay to ensure window is fully initialized
-            let saved_window_clone = saved_window.clone();
-            tauri::async_runtime::spawn(async move {
-              tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-              println!("[Prism] Attempting auto-arrangement...");
-              match window_management::arrange_windows(&saved_window_clone, &prism_window) {
-                Ok(_) => println!("[Prism] Auto-arrangement successful"),
-                Err(e) => println!("[Prism] Auto-arrangement failed: {}", e),
+        // Set up window close handler to hide instead of exit
+        if let Some(main_window) = app.get_webview_window("main") {
+          let window_clone = main_window.clone();
+          main_window.on_window_event(move |event| {
+            match event {
+              tauri::WindowEvent::CloseRequested { api, .. } => {
+                // Prevent the window from closing and hide it instead
+                api.prevent_close();
+                let _ = window_clone.hide();
+                
               }
-            });
-          }
-        } else {
-          println!("[Prism] No saved window found, entering selection mode");
-          *state.selection_mode.lock().unwrap() = true;
-          match app_handle.emit("selection-mode-changed", true) {
-            Ok(_) => println!("[Prism] Emitted selection-mode-changed: true"),
-            Err(e) => println!("[Prism] Failed to emit selection-mode-changed: {}", e),
-          }
+              // Commented out: This was closing overlays immediately when main window lost focus
+              // tauri::WindowEvent::Focused(false) => {
+              //   // Close overlay when main window loses focus
+              //   println!("[SnowKite] Main window lost focus, closing overlay if it exists");
+              //   if let Some(overlay_window) = app_handle.get_webview_window("screen-overlay") {
+              //     println!("[SnowKite] Closing overlay window due to focus loss");
+              //     let _ = overlay_window.close();
+              //   }
+              // }
+              _ => {}
+            }
+          });
         }
       }
 

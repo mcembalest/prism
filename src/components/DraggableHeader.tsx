@@ -29,12 +29,12 @@ export function DraggableHeader() {
   }
 
   return (
-    <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/80 border-b border-zinc-800/50 rounded-t-2xl">
+    <div className="flex items-center justify-between px-3 py-2 bg-card/80 border-b border-border rounded-t-2xl">
       <div
         data-tauri-drag-region
         className="flex items-center gap-2 flex-1 select-none"
       >
-        <span className="text-xs font-semibold text-white/90">Prism</span>
+        <span className="text-xs font-semibold text-foreground/90">Rocket Alumni Solutions + SnowKite</span>
       </div>
 
       <div className="flex items-center gap-1">

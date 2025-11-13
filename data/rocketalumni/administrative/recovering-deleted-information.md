@@ -1,0 +1,1 @@
+If you delete a folder or profile, you'll see a trash button on the bottom-right corner of your main folders page. You'll be able to restore the folder/profile on the trash page. Unfortunately, there is no way to recover deleted images, videos, and logos.

@@ -31,3 +31,8 @@ yarn-error.log*
 .pnpm-debug.log*
 .env*
 *.tsbuildinfo
+
+target/*
+
+__pycache__/*
+dump.rdb
