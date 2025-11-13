@@ -42,7 +42,7 @@ export function WalkthroughView({
 
     return (
         <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Clean header with centered title and back button */}
+            {/* Clean header with back button */}
             <div className="relative px-6 py-4 border-b border-border">
                 <button
                     onClick={onBack}
@@ -51,11 +51,11 @@ export function WalkthroughView({
                 >
                     <ArrowLeft className="h-5 w-5 text-foreground" />
                 </button>
-                <h1 className="text-center text-base font-medium text-foreground">
-                    {isPrebuiltGuide && prebuiltGuideSession
-                        ? prebuiltGuideSession.guide.title || 'Assistant'
-                        : 'Assistant'}
-                </h1>
+                {isPrebuiltGuide && prebuiltGuideSession?.guide.title && (
+                    <h1 className="text-center text-base font-medium text-foreground">
+                        {prebuiltGuideSession.guide.title}
+                    </h1>
+                )}
             </div>
 
             {/* Messages area */}
@@ -72,6 +72,7 @@ export function WalkthroughView({
                                                 content={message.content}
                                                 role={message.role}
                                                 variant={message.variant}
+                                                filesRead={message.filesRead}
                                             />
                                         </div>
 

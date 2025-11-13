@@ -81,7 +81,8 @@ export const MessageBubble = memo(function MessageBubble({ content, role, varian
                     {filesRead && filesRead.length > 0 && (
                         <SearchSummary files={filesRead} />
                     )}
-                    <div className={variant === 'metadata' ? 'text-xs text-muted-foreground leading-relaxed' : 'text-sm leading-relaxed'}>
+                    {!(variant === 'metadata' && filesRead && filesRead.length > 0) && (
+                        <div className={variant === 'metadata' ? 'text-xs text-muted-foreground leading-relaxed' : 'text-sm leading-relaxed'}>
                         <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{
@@ -117,7 +118,8 @@ export const MessageBubble = memo(function MessageBubble({ content, role, varian
                         >
                             {content}
                         </ReactMarkdown>
-                    </div>
+                        </div>
+                    )}
                 </>
             )}
         </div>

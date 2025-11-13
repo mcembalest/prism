@@ -17,8 +17,9 @@ import { useViewNavigation } from '@/hooks/useViewNavigation'
 import { useMessages } from '@/hooks/useMessages'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useGuideSession } from '@/hooks/useGuideSession'
-import { createAssistantMessage, createSearchingMessage } from '@/utils/messageHelpers'
-import { convertClaudeEventToMessages, createUserMessage, getRelativeFilePath } from '@/utils/claudeHelpers'
+import { createAssistantMessage } from '@/utils/messageHelpers'
+import { createUserMessage } from '@/utils/claudeHelpers'
+import { handleClaudeQuery as executeClaudeQuery } from '@/utils/claudeQueryHandler'
 import { EVENTS, TAURI_COMMANDS, TIMING, VIEWS } from '@/utils/constants'
 import type { Message } from '@/types/guide'
 
@@ -104,11 +105,6 @@ export function SnowKiteContainer() {
             const currentWindow = getCurrentWindow()
             unlisten = await currentWindow.onFocusChanged(({ payload: focused }) => {
                 console.log('[SnowKiteContainer] Window focus changed:', focused)
-                // Commented out: This was closing overlays immediately when window lost focus
-                // if (!focused && overlayManager.overlayWindowExistsRef.current) {
-                //     console.log('[SnowKiteContainer] Window lost focus, closing overlay')
-                //     overlayManager.closeOverlay()
-                // }
             })
         }
 
@@ -220,75 +216,20 @@ export function SnowKiteContainer() {
 
     const handleClaudeQuery = useCallback(
         async (query: string) => {
-            try {
-                // Add delay before showing searching message for professional feel
-                await new Promise(resolve => setTimeout(resolve, TIMING.STATUS_DELAY))
-
-                // Show searching message
-                const searchingMessage = createSearchingMessage(query)
-                messages.addMessage(searchingMessage)
-
-                // Track files read across all events in this query
-                const filesReadInSession: string[] = []
-                let searchingMessageRemoved = false
-
-                // Stream Claude responses
-                for await (const event of claudeService.queryStream({
-                    prompt: query,
+            await executeClaudeQuery(
+                query,
+                {
                     cwd: "data/rocketalumni/",
+                    aiContextPrompt: modeConfig.aiContextPrompt,
                     allowedTools: ["Read", "Glob", "Grep"],
-                    sessionId: claudeService.getSessionId() || undefined,
-                    systemPrompt: modeConfig.aiContextPrompt
-                })) {
-                    // Handle error events with toasts instead of messages
-                    if (event.type === 'error') {
-                        showToast(event.error || 'An unknown error occurred')
-                        continue
-                    }
-                    if (event.type === 'result' && event.subtype === 'error' && event.error) {
-                        showToast(event.error)
-                        continue
-                    }
-
-                    // Collect files from Read tools across all events
-                    if (event.type === 'assistant') {
-                        const content = event.message.content || []
-
-                        // Remove searching message when first text content arrives
-                        if (!searchingMessageRemoved) {
-                            const hasTextContent = content.some(item => item.type === 'text' && item.text)
-                            if (hasTextContent) {
-                                messages.setMessages(prev => prev.filter(msg => msg.id !== searchingMessage.id))
-                                searchingMessageRemoved = true
-                            }
-                        }
-
-                        for (const item of content) {
-                            if (item.type === 'tool_use' && item.name === 'Read' && item.input) {
-                                const relativePath = getRelativeFilePath(item.input)
-                                if (relativePath) {
-                                    filesReadInSession.push(relativePath)
-                                }
-                            }
-                        }
-                    }
-
-                    const newMessages = convertClaudeEventToMessages(event)
-
-                    // Attach accumulated files to text messages
-                    newMessages.forEach(msg => {
-                        if (msg.variant === 'assistant' && msg.role === 'assistant' && msg.content !== '...') {
-                            if (filesReadInSession.length > 0) {
-                                msg.filesRead = [...filesReadInSession]
-                            }
-                        }
-                        messages.addMessage(msg)
-                    })
-                }
-            } catch (error) {
-                console.error('Claude query error:', error)
-                showToast(error instanceof Error ? error.message : String(error))
-            }
+                },
+                {
+                    addMessage: messages.addMessage,
+                    setMessages: messages.setMessages,
+                    messages: messages.messages,
+                },
+                showToast
+            )
         },
         [messages, modeConfig.aiContextPrompt, showToast]
     )

@@ -10,6 +10,7 @@
 import express from 'express';
 import cors from 'cors';
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import Anthropic from '@anthropic-ai/sdk';
 
 const app = express();
 const PORT = 3001;
@@ -20,7 +21,16 @@ app.use(express.json());
 
 // SSE endpoint for streaming Claude responses
 app.post('/api/claude/query', async (req, res) => {
-    const { prompt, cwd, allowedTools, sessionId, systemPrompt } = req.body;
+    const {
+        prompt,
+        cwd,
+        allowedTools,
+        sessionId,
+        systemPrompt,
+        maxThinkingTokens,
+        maxTurns,
+        includePartialMessages
+    } = req.body;
 
     if (!prompt) {
         res.status(400).json({ error: 'Prompt is required' });
@@ -34,14 +44,33 @@ app.post('/api/claude/query', async (req, res) => {
 
     try {
         // Stream Claude events to the client
+        const resolvedAllowedTools = Array.isArray(allowedTools)
+            ? allowedTools
+            : ["Read", "Glob", "Grep"];
+
+        const options: Record<string, unknown> = {
+            allowedTools: resolvedAllowedTools,
+            cwd: cwd || "data/rocketalumni/",
+            resume: sessionId || undefined,
+            systemPrompt: systemPrompt || undefined,
+            model: "claude-haiku-4-5-20251001"
+        };
+
+        if (typeof maxThinkingTokens === 'number') {
+            options.maxThinkingTokens = maxThinkingTokens;
+        }
+
+        if (typeof maxTurns === 'number') {
+            options.maxTurns = maxTurns;
+        }
+
+        if (typeof includePartialMessages === 'boolean') {
+            options.includePartialMessages = includePartialMessages;
+        }
+
         for await (const event of query({
             prompt,
-            options: {
-                allowedTools: allowedTools || ["Read", "Glob", "Grep"],
-                cwd: cwd || "data/rocketalumni/",
-                resume: sessionId || undefined,
-                systemPrompt: systemPrompt || undefined
-            }
+            options
         })) {
             // Send each event as SSE
             res.write(`data: ${JSON.stringify(event)}\n\n`);
