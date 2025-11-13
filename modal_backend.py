@@ -61,6 +61,13 @@ def serialize_message(obj):
             }
         elif class_name == 'ResultMessage':
             result['type'] = 'result'
+        elif class_name == 'StreamEvent':
+            return {
+                'type': 'stream_event',
+                'event': result.get('event'),
+                'parent_tool_use_id': result.get('parent_tool_use_id'),
+                'session_id': result.get('session_id', 'unknown')
+            }
 
         return result
     elif isinstance(obj, list):
@@ -73,15 +80,13 @@ def serialize_message(obj):
 
 image = (
       modal.Image.debian_slim()
-      .apt_install("curl")  # Needed for Node.js installation
+      .apt_install("curl")
       .run_commands(
-          # Install Node.js 20
           "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -",
           "apt-get install -y nodejs",
-          # Install Claude Code CLI globally
           "npm install -g @anthropic-ai/claude-code",
       )
-      .pip_install(
+      .uv_pip_install(
           "fastapi",
           "anthropic",
           "claude-agent-sdk",
@@ -89,7 +94,6 @@ image = (
       )
   )
 
-# Reference the Volume and Secret
 volume = modal.Volume.from_name("rocket-alumni-data", create_if_missing=True)
 app = modal.App("rocket-alumni-backend")
 
@@ -116,6 +120,9 @@ async def query_endpoint(request: dict):
     allowedTools = request.get("allowedTools")
     sessionId = request.get("sessionId")
     systemPrompt = request.get("systemPrompt")
+    maxThinkingTokens = request.get("maxThinkingTokens")
+    maxTurns = request.get("maxTurns")
+    includePartialMessages = request.get("includePartialMessages")
 
     if not prompt:
         return {"error": "Prompt is required"}, 400
@@ -133,13 +140,27 @@ async def query_endpoint(request: dict):
     async def event_generator():
         """Generator function for SSE events."""
         try:
-            options = ClaudeAgentOptions(
-                allowed_tools=tools,
-                cwd=working_dir,
-                resume=sessionId if sessionId else None,
-                system_prompt=systemPrompt if systemPrompt else None,
-                model="claude-haiku-4-5-20251001",
-            )
+            option_kwargs: dict = {
+                "allowed_tools": tools,
+                "cwd": working_dir,
+                "resume": sessionId if sessionId else None,
+                "system_prompt": systemPrompt if systemPrompt else None,
+                "model": "claude-haiku-4-5-20251001",
+            }
+
+            if isinstance(maxTurns, int):
+                option_kwargs["max_turns"] = maxTurns
+
+            if isinstance(includePartialMessages, bool):
+                option_kwargs["include_partial_messages"] = includePartialMessages
+
+            options = ClaudeAgentOptions(**option_kwargs)
+
+            if isinstance(maxThinkingTokens, int):
+                for attr in ("max_thinking_tokens", "maxThinkingTokens"):
+                    if hasattr(options, attr):
+                        setattr(options, attr, maxThinkingTokens)
+                        break
 
             # Track session ID from first event
             current_session_id = None
@@ -174,61 +195,6 @@ async def query_endpoint(request: dict):
             }
 
     return EventSourceResponse(event_generator())
-
-
-@app.function(
-    image=image,
-    secrets=[modal.Secret.from_name("anthropic-api-key")],
-    timeout=30,
-)
-@modal.fastapi_endpoint(method="POST")
-def summarize_endpoint(request: dict):
-    """
-    Simple text completion endpoint for generating search summaries.
-    Mirrors the Express backend's /api/claude/summarize endpoint.
-    """
-    from anthropic import Anthropic
-
-    # Extract query from request body
-    query = request.get("query")
-
-    if not query:
-        return {"error": "Query is required"}, 400
-
-    try:
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            return {"error": "No Anthropic API key configured"}, 500
-
-        anthropic = Anthropic(api_key=api_key)
-
-        prompt = f"""Extract the main topic in 2-4 words. Follow the examples exactly.
-
-Examples:
-"search for pricing info" -> pricing information
-"where is the login page" -> login page
-"tell me about security" -> security details
-
-"{query}" ->"""
-
-        message = anthropic.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=50,
-            system="You are a text summarization tool. Respond ONLY with the requested summary, no explanations or additional text.",
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        # Extract text from response
-        summary = ""
-        if message.content and len(message.content) > 0:
-            if hasattr(message.content[0], 'text'):
-                summary = message.content[0].text.split('\n')[0].strip()
-
-        return {"summary": summary}
-
-    except Exception as e:
-        print(f"Summarize error: {e}")
-        return {"error": str(e)}, 500
 
 
 @app.function(image=image)

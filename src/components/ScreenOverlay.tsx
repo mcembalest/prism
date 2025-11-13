@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { listen } from '@tauri-apps/api/event'
-import type { Point } from '@/types/walkthrough'
-import type { CaptionPosition } from '@/types/guide'
+import type { Point, CaptionPosition } from '@/types/guide'
 
 interface OverlayData {
     points: Point[]

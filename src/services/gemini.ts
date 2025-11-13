@@ -7,7 +7,7 @@ import type {
   WalkthroughResult,
   WalkthroughStepResult,
   IntentType
-} from '@/types/walkthrough'
+} from '@/types/guide'
 
 type GeminiPart =
   | { text: string }

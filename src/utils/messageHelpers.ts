@@ -25,7 +25,7 @@ export const createUserMessage = (content: string): Message => ({
 export const createSearchingMessage = (query: string): Message => ({
     id: `searching-${Date.now()}`,
     role: 'assistant',
-    content: `Searching for '${query}'...`,
+    content: query,
     variant: 'metadata',
     metadata: {
         type: 'system',

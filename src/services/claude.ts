@@ -4,12 +4,13 @@
  */
 
 // Modal production endpoint for Claude queries
-const CLAUDE_BACKEND_URL = 'https://max-80448--rocket-alumni-backend-query-endpoint.modal.run';
+const CLAUDE_BACKEND_URL = 'http://localhost:3001/api/claude/query';
+//const CLAUDE_BACKEND_URL = 'https://max-80448--rocket-alumni-backend-query-endpoint.modal.run';
 
 /**
  * Claude event types that we'll receive from the streaming API
  */
-export type ClaudeEventType = 'system' | 'assistant' | 'user' | 'result' | 'error';
+export type ClaudeEventType = 'system' | 'assistant' | 'user' | 'result' | 'error' | 'stream_event';
 
 export interface ClaudeSystemEvent {
     type: 'system';
@@ -63,12 +64,33 @@ export interface ClaudeErrorEvent {
     [key: string]: any;
 }
 
+export interface ClaudeStreamEvent {
+    type: 'stream_event';
+    event: {
+        type: string;
+        delta?: {
+            type?: string;
+            text?: string;
+            [key: string]: any;
+        };
+        content_block?: {
+            type: string;
+            [key: string]: any;
+        };
+        index?: number;
+        [key: string]: any;
+    };
+    session_id: string;
+    [key: string]: any;
+}
+
 export type ClaudeEvent = 
     | ClaudeSystemEvent 
     | ClaudeAssistantEvent 
     | ClaudeUserEvent 
     | ClaudeResultEvent 
-    | ClaudeErrorEvent;
+    | ClaudeErrorEvent
+    | ClaudeStreamEvent;
 
 /**
  * Options for Claude queries
@@ -79,6 +101,9 @@ export interface ClaudeQueryOptions {
     allowedTools?: string[];
     sessionId?: string;
     systemPrompt?: string;
+    maxThinkingTokens?: number;
+    maxTurns?: number;
+    includePartialMessages?: boolean;
 }
 
 /**
@@ -102,7 +127,10 @@ export class ClaudeService {
                     cwd: options.cwd,
                     allowedTools: options.allowedTools,
                     sessionId: options.sessionId,
-                    systemPrompt: options.systemPrompt
+                    systemPrompt: options.systemPrompt,
+                    maxThinkingTokens: options.maxThinkingTokens,
+                    maxTurns: options.maxTurns,
+                    includePartialMessages: options.includePartialMessages
                 })
             });
 

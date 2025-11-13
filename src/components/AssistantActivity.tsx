@@ -1,4 +1,3 @@
-import * as React from "react"
 import { Loader2, Search } from "lucide-react"
 
 type ActivityPhase = "thinking" | "searching"

@@ -35,3 +35,4 @@ yarn-error.log*
 target/*
 
 __pycache__/*
+dump.rdb
